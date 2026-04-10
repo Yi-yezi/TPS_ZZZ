@@ -10,7 +10,7 @@ namespace SkillSystem.Editor
 {
     /// <summary>
     /// 动画事件自动同步 - 监控 AnimationTrack 中的 clip 变化，
-    /// 当检测到 AnimationClip 含有事件时自动同步到 FunctionEventTrack
+    /// 当检测到 AnimationClip 含有事件时自动清除
     /// </summary>
     [InitializeOnLoad]
     public static class AnimationEventSync
@@ -91,7 +91,7 @@ namespace SkillSystem.Editor
 
         /// <summary>
         /// 清除 AnimationTrack 中所有 clip 自带的 AnimationEvent，
-        /// 避免 "has no receiver" 警告。同时移除之前自动同步的 FunctionEventClip。
+        /// 避免 "has no receiver" 警告。
         /// </summary>
         public static void SyncEvents(ActionSO action)
         {
@@ -117,31 +117,12 @@ namespace SkillSystem.Editor
                 }
             }
 
-            // 移除之前自动同步生成的 FunctionEventClip
-            const string autoPrefix = "[Auto] ";
-            var funcTrack = action.GetOutputTracks().OfType<FunctionEventTrack>().FirstOrDefault();
-            if (funcTrack != null)
-                RemoveAutoClips(funcTrack, autoPrefix);
-
             if (strippedCount > 0)
             {
                 EditorUtility.SetDirty(action);
                 AssetDatabase.SaveAssets();
                 Debug.Log($"[AnimationEventSync] 已清除 {strippedCount} 个 AnimationClip 自带事件");
             }
-        }
-
-        private static void RemoveAutoClips(FunctionEventTrack track, string autoPrefix)
-        {
-            var toRemove = track.GetClips()
-                .Where(c => c.displayName != null && c.displayName.StartsWith(autoPrefix))
-                .ToList();
-
-            foreach (var clip in toRemove)
-                track.DeleteClip(clip);
-
-            if (toRemove.Count > 0)
-                EditorUtility.SetDirty(track);
         }
     }
 }

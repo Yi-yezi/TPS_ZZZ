@@ -268,7 +268,7 @@ namespace SkillSystem.Editor
             EditorGUILayout.Space(2);
             EditorGUILayout.LabelField($"Timeline 轨道数: {runtimeData.TrackCount}", EditorStyles.miniLabel);
             EditorGUILayout.LabelField(
-                $"特效 {runtimeData.VfxEvents.Count} | 音效 {runtimeData.SfxEvents.Count} | 事件 {runtimeData.FunctionEvents.Count} | 打击感 {runtimeData.HitFeelEvents.Count}",
+                $"特效 {runtimeData.VfxEvents.Count} | 音效 {runtimeData.SfxEvents.Count} | 打击感 {runtimeData.HitFeelEvents.Count}",
                 EditorStyles.miniLabel);
 
             if (runtimeData.TrackCount == 0)

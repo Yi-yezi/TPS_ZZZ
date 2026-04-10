@@ -15,16 +15,7 @@
                     "initialStateCheck": true
                 },
                 {
-                    "name": "Jump",
-                    "type": "Button",
-                    "id": "1c991d41-5ea2-4e5d-86d1-d0f3f4b97299",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
-                },
-                {
-                    "name": "Dash",
+                    "name": "Dodge",
                     "type": "Button",
                     "id": "79cdb1dc-3b58-4982-9092-4d3c68695778",
                     "expectedControlType": "",
@@ -33,16 +24,7 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "Crouch",
-                    "type": "Button",
-                    "id": "689c0a84-3eea-4709-a9c5-e42f48948ae6",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
-                },
-                {
-                    "name": "NormalAttack",
+                    "name": "Attack",
                     "type": "Button",
                     "id": "1da32a4d-1e4e-4bc1-a4ba-ea731c095b8e",
                     "expectedControlType": "",
@@ -51,7 +33,7 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "SkillQ",
+                    "name": "Skill",
                     "type": "Button",
                     "id": "d1ec7633-9b3c-4e80-8c30-572ef6ef0217",
                     "expectedControlType": "",
@@ -60,7 +42,7 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "SkillE",
+                    "name": "UltimateSkill",
                     "type": "Button",
                     "id": "4a4828be-3d2a-4108-9520-50b2660a9bfa",
                     "expectedControlType": "",
@@ -127,34 +109,12 @@
                 },
                 {
                     "name": "",
-                    "id": "1a54f5a8-dc9c-478b-848d-15844b73341f",
-                    "path": "<Keyboard>/space",
-                    "interactions": "SlowTap",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Jump",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
                     "id": "c0337210-20c8-49ef-b3d1-37bbd29fef30",
                     "path": "<Keyboard>/leftShift",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Dash",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "1e383044-6a13-4ced-b849-9116903a3478",
-                    "path": "<Keyboard>/leftCtrl",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Crouch",
+                    "action": "Dodge",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -165,7 +125,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "NormalAttack",
+                    "action": "Attack",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -176,7 +136,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "SkillQ",
+                    "action": "Skill",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -187,7 +147,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "SkillE",
+                    "action": "UltimateSkill",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

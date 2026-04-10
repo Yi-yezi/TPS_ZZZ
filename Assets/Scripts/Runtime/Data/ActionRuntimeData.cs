@@ -23,7 +23,6 @@ namespace SkillSystem
         public string AnimatorStateName;
         public readonly List<ActionVfxEventData> VfxEvents = new();
         public readonly List<ActionSfxEventData> SfxEvents = new();
-        public readonly List<ActionFunctionEventData> FunctionEvents = new();
         public readonly List<ActionHitFeelEventData> HitFeelEvents = new();
         public readonly List<ActionTransitionWindowData> TransitionWindows = new();
 
@@ -73,21 +72,6 @@ namespace SkillSystem
         public float Volume;
         public float Pitch;
         public float PitchRandomRange;
-    }
-
-    /// <summary>
-    /// 函数事件数据（来自 FunctionEventTrack）。
-    /// </summary>
-    [Serializable]
-    public struct ActionFunctionEventData
-    {
-        public string TrackName;
-        public float StartTime;
-        public float Duration;
-        public string FunctionName;
-        public string StringParam;
-        public int IntParam;
-        public float FloatParam;
     }
 
     /// <summary>
@@ -207,19 +191,6 @@ namespace SkillSystem
                         Volume = sfxClip.volume,
                         Pitch = sfxClip.pitch,
                         PitchRandomRange = sfxClip.pitchRandomRange,
-                    });
-                    break;
-
-                case FunctionEventClip functionClip:
-                    data.FunctionEvents.Add(new ActionFunctionEventData
-                    {
-                        TrackName = track.name,
-                        StartTime = (float)clip.start,
-                        Duration = (float)clip.duration,
-                        FunctionName = functionClip.functionName,
-                        StringParam = functionClip.stringParam,
-                        IntParam = functionClip.intParam,
-                        FloatParam = functionClip.floatParam,
                     });
                     break;
 

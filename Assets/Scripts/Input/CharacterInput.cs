@@ -37,16 +37,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": true
                 },
                 {
-                    ""name"": ""Jump"",
-                    ""type"": ""Button"",
-                    ""id"": ""1c991d41-5ea2-4e5d-86d1-d0f3f4b97299"",
-                    ""expectedControlType"": """",
-                    ""processors"": """",
-                    ""interactions"": """",
-                    ""initialStateCheck"": false
-                },
-                {
-                    ""name"": ""Dash"",
+                    ""name"": ""Dodge"",
                     ""type"": ""Button"",
                     ""id"": ""79cdb1dc-3b58-4982-9092-4d3c68695778"",
                     ""expectedControlType"": """",
@@ -55,16 +46,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
-                    ""name"": ""Crouch"",
-                    ""type"": ""Button"",
-                    ""id"": ""689c0a84-3eea-4709-a9c5-e42f48948ae6"",
-                    ""expectedControlType"": """",
-                    ""processors"": """",
-                    ""interactions"": """",
-                    ""initialStateCheck"": false
-                },
-                {
-                    ""name"": ""NormalAttack"",
+                    ""name"": ""Attack"",
                     ""type"": ""Button"",
                     ""id"": ""1da32a4d-1e4e-4bc1-a4ba-ea731c095b8e"",
                     ""expectedControlType"": """",
@@ -73,7 +55,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
-                    ""name"": ""SkillQ"",
+                    ""name"": ""Skill"",
                     ""type"": ""Button"",
                     ""id"": ""d1ec7633-9b3c-4e80-8c30-572ef6ef0217"",
                     ""expectedControlType"": """",
@@ -82,7 +64,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
-                    ""name"": ""SkillE"",
+                    ""name"": ""UltimateSkill"",
                     ""type"": ""Button"",
                     ""id"": ""4a4828be-3d2a-4108-9520-50b2660a9bfa"",
                     ""expectedControlType"": """",
@@ -149,34 +131,12 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                 },
                 {
                     ""name"": """",
-                    ""id"": ""1a54f5a8-dc9c-478b-848d-15844b73341f"",
-                    ""path"": ""<Keyboard>/space"",
-                    ""interactions"": ""SlowTap"",
-                    ""processors"": """",
-                    ""groups"": """",
-                    ""action"": ""Jump"",
-                    ""isComposite"": false,
-                    ""isPartOfComposite"": false
-                },
-                {
-                    ""name"": """",
                     ""id"": ""c0337210-20c8-49ef-b3d1-37bbd29fef30"",
                     ""path"": ""<Keyboard>/leftShift"",
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""Dash"",
-                    ""isComposite"": false,
-                    ""isPartOfComposite"": false
-                },
-                {
-                    ""name"": """",
-                    ""id"": ""1e383044-6a13-4ced-b849-9116903a3478"",
-                    ""path"": ""<Keyboard>/leftCtrl"",
-                    ""interactions"": """",
-                    ""processors"": """",
-                    ""groups"": """",
-                    ""action"": ""Crouch"",
+                    ""action"": ""Dodge"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -187,7 +147,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""NormalAttack"",
+                    ""action"": ""Attack"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -198,7 +158,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""SkillQ"",
+                    ""action"": ""Skill"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -209,7 +169,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""SkillE"",
+                    ""action"": ""UltimateSkill"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -221,12 +181,10 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
         // Player
         m_Player = asset.FindActionMap("Player", throwIfNotFound: true);
         m_Player_Movement = m_Player.FindAction("Movement", throwIfNotFound: true);
-        m_Player_Jump = m_Player.FindAction("Jump", throwIfNotFound: true);
-        m_Player_Dash = m_Player.FindAction("Dash", throwIfNotFound: true);
-        m_Player_Crouch = m_Player.FindAction("Crouch", throwIfNotFound: true);
-        m_Player_NormalAttack = m_Player.FindAction("NormalAttack", throwIfNotFound: true);
-        m_Player_SkillQ = m_Player.FindAction("SkillQ", throwIfNotFound: true);
-        m_Player_SkillE = m_Player.FindAction("SkillE", throwIfNotFound: true);
+        m_Player_Dodge = m_Player.FindAction("Dodge", throwIfNotFound: true);
+        m_Player_Attack = m_Player.FindAction("Attack", throwIfNotFound: true);
+        m_Player_Skill = m_Player.FindAction("Skill", throwIfNotFound: true);
+        m_Player_UltimateSkill = m_Player.FindAction("UltimateSkill", throwIfNotFound: true);
     }
 
     ~@CharacterInput()
@@ -294,23 +252,19 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
     private readonly InputActionMap m_Player;
     private List<IPlayerActions> m_PlayerActionsCallbackInterfaces = new List<IPlayerActions>();
     private readonly InputAction m_Player_Movement;
-    private readonly InputAction m_Player_Jump;
-    private readonly InputAction m_Player_Dash;
-    private readonly InputAction m_Player_Crouch;
-    private readonly InputAction m_Player_NormalAttack;
-    private readonly InputAction m_Player_SkillQ;
-    private readonly InputAction m_Player_SkillE;
+    private readonly InputAction m_Player_Dodge;
+    private readonly InputAction m_Player_Attack;
+    private readonly InputAction m_Player_Skill;
+    private readonly InputAction m_Player_UltimateSkill;
     public struct PlayerActions
     {
         private @CharacterInput m_Wrapper;
         public PlayerActions(@CharacterInput wrapper) { m_Wrapper = wrapper; }
         public InputAction @Movement => m_Wrapper.m_Player_Movement;
-        public InputAction @Jump => m_Wrapper.m_Player_Jump;
-        public InputAction @Dash => m_Wrapper.m_Player_Dash;
-        public InputAction @Crouch => m_Wrapper.m_Player_Crouch;
-        public InputAction @NormalAttack => m_Wrapper.m_Player_NormalAttack;
-        public InputAction @SkillQ => m_Wrapper.m_Player_SkillQ;
-        public InputAction @SkillE => m_Wrapper.m_Player_SkillE;
+        public InputAction @Dodge => m_Wrapper.m_Player_Dodge;
+        public InputAction @Attack => m_Wrapper.m_Player_Attack;
+        public InputAction @Skill => m_Wrapper.m_Player_Skill;
+        public InputAction @UltimateSkill => m_Wrapper.m_Player_UltimateSkill;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -323,24 +277,18 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
             @Movement.started += instance.OnMovement;
             @Movement.performed += instance.OnMovement;
             @Movement.canceled += instance.OnMovement;
-            @Jump.started += instance.OnJump;
-            @Jump.performed += instance.OnJump;
-            @Jump.canceled += instance.OnJump;
-            @Dash.started += instance.OnDash;
-            @Dash.performed += instance.OnDash;
-            @Dash.canceled += instance.OnDash;
-            @Crouch.started += instance.OnCrouch;
-            @Crouch.performed += instance.OnCrouch;
-            @Crouch.canceled += instance.OnCrouch;
-            @NormalAttack.started += instance.OnNormalAttack;
-            @NormalAttack.performed += instance.OnNormalAttack;
-            @NormalAttack.canceled += instance.OnNormalAttack;
-            @SkillQ.started += instance.OnSkillQ;
-            @SkillQ.performed += instance.OnSkillQ;
-            @SkillQ.canceled += instance.OnSkillQ;
-            @SkillE.started += instance.OnSkillE;
-            @SkillE.performed += instance.OnSkillE;
-            @SkillE.canceled += instance.OnSkillE;
+            @Dodge.started += instance.OnDodge;
+            @Dodge.performed += instance.OnDodge;
+            @Dodge.canceled += instance.OnDodge;
+            @Attack.started += instance.OnAttack;
+            @Attack.performed += instance.OnAttack;
+            @Attack.canceled += instance.OnAttack;
+            @Skill.started += instance.OnSkill;
+            @Skill.performed += instance.OnSkill;
+            @Skill.canceled += instance.OnSkill;
+            @UltimateSkill.started += instance.OnUltimateSkill;
+            @UltimateSkill.performed += instance.OnUltimateSkill;
+            @UltimateSkill.canceled += instance.OnUltimateSkill;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -348,24 +296,18 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
             @Movement.started -= instance.OnMovement;
             @Movement.performed -= instance.OnMovement;
             @Movement.canceled -= instance.OnMovement;
-            @Jump.started -= instance.OnJump;
-            @Jump.performed -= instance.OnJump;
-            @Jump.canceled -= instance.OnJump;
-            @Dash.started -= instance.OnDash;
-            @Dash.performed -= instance.OnDash;
-            @Dash.canceled -= instance.OnDash;
-            @Crouch.started -= instance.OnCrouch;
-            @Crouch.performed -= instance.OnCrouch;
-            @Crouch.canceled -= instance.OnCrouch;
-            @NormalAttack.started -= instance.OnNormalAttack;
-            @NormalAttack.performed -= instance.OnNormalAttack;
-            @NormalAttack.canceled -= instance.OnNormalAttack;
-            @SkillQ.started -= instance.OnSkillQ;
-            @SkillQ.performed -= instance.OnSkillQ;
-            @SkillQ.canceled -= instance.OnSkillQ;
-            @SkillE.started -= instance.OnSkillE;
-            @SkillE.performed -= instance.OnSkillE;
-            @SkillE.canceled -= instance.OnSkillE;
+            @Dodge.started -= instance.OnDodge;
+            @Dodge.performed -= instance.OnDodge;
+            @Dodge.canceled -= instance.OnDodge;
+            @Attack.started -= instance.OnAttack;
+            @Attack.performed -= instance.OnAttack;
+            @Attack.canceled -= instance.OnAttack;
+            @Skill.started -= instance.OnSkill;
+            @Skill.performed -= instance.OnSkill;
+            @Skill.canceled -= instance.OnSkill;
+            @UltimateSkill.started -= instance.OnUltimateSkill;
+            @UltimateSkill.performed -= instance.OnUltimateSkill;
+            @UltimateSkill.canceled -= instance.OnUltimateSkill;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -386,11 +328,9 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
     public interface IPlayerActions
     {
         void OnMovement(InputAction.CallbackContext context);
-        void OnJump(InputAction.CallbackContext context);
-        void OnDash(InputAction.CallbackContext context);
-        void OnCrouch(InputAction.CallbackContext context);
-        void OnNormalAttack(InputAction.CallbackContext context);
-        void OnSkillQ(InputAction.CallbackContext context);
-        void OnSkillE(InputAction.CallbackContext context);
+        void OnDodge(InputAction.CallbackContext context);
+        void OnAttack(InputAction.CallbackContext context);
+        void OnSkill(InputAction.CallbackContext context);
+        void OnUltimateSkill(InputAction.CallbackContext context);
     }
 }
