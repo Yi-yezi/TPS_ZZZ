@@ -1,0 +1,16 @@
+# Ignore everything by default.
+/*
+
+# Keep this file tracked.
+!/.gitignore
+
+# Allow the Assets tree only far enough to reach scripts.
+!/Assets/
+/Assets/*
+!/Assets/Scripts/
+!/Assets/Scripts/**/
+
+# Track script sources and their Unity metadata.
+!/Assets/Scripts.meta
+!/Assets/Scripts/**/*.cs
+!/Assets/Scripts/**/*.meta
