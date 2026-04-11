@@ -236,19 +236,20 @@ namespace SkillSystem.Editor
             }
 
             var menu = new GenericMenu();
-            foreach (var (name, state) in states)
+            foreach (var (menuPath, state) in states)
             {
-                bool exists = _actionList.actions.Any(a => a != null && a.name == name);
+                string stateName = state.name; // 纯 State 名，不含 SubStateMachine 前缀
+                bool exists = _actionList.actions.Any(a => a != null && a.name == stateName);
                 if (exists)
                 {
-                    menu.AddDisabledItem(new GUIContent($"{name} (已存在)"));
+                    menu.AddDisabledItem(new GUIContent($"{menuPath} (已存在)"));
                 }
                 else
                 {
-                    var capturedName = name;
+                    var capturedStateName = stateName;
                     var capturedState = state;
-                    menu.AddItem(new GUIContent(name), false,
-                        () => CreateActionFromState(capturedName, capturedState));
+                    menu.AddItem(new GUIContent(menuPath), false,
+                        () => CreateActionFromState(capturedStateName, capturedState));
                 }
             }
             menu.ShowAsContext();
@@ -350,13 +351,16 @@ namespace SkillSystem.Editor
         {
             foreach (var childState in sm.states)
             {
-                results.Add((prefix + childState.state.name, childState.state));
+                // name = 纯 State 名（与 ActionNames 常量、Animator.CrossFade 参数一致）
+                // prefix 只用于菜单中的分组路径显示
+                string menuPath = prefix + childState.state.name;
+                results.Add((menuPath, childState.state));
             }
 
             foreach (var sub in sm.stateMachines)
             {
                 CollectStatesRecursive(sub.stateMachine,
-                    prefix + sub.stateMachine.name + ".", results);
+                    prefix + sub.stateMachine.name + "/", results);
             }
         }
 

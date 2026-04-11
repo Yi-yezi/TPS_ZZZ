@@ -33,6 +33,9 @@ namespace SkillSystem.Editor
 
         public override void OnInspectorGUI()
         {
+            // 从 Timeline 轨道同步回指令转移列表
+            SyncCommandTransitionsFromTracks(_target);
+
             serializedObject.Update();
 
             // 名称编辑
@@ -80,6 +83,8 @@ namespace SkillSystem.Editor
             if (_foldCombat)
             {
                 EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("disableGravity"), new GUIContent("禁用重力（Root Motion 控制 Y 轴）"));
+                EditorGUILayout.Space(2);
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("damage"), new GUIContent("伤害"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldown"), new GUIContent("冷却时间"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("attackDistance"), new GUIContent("攻击距离"));
@@ -99,66 +104,24 @@ namespace SkillSystem.Editor
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("finishTransition"), true);
-                DrawActionNamePopup(serializedObject.FindProperty("inheritTransitionActionName"), "继承转移自");
                 EditorGUI.indentLevel--;
             }
 
-            // 指令转移（每条 CommandTransitionTrack 对应一条转移）
-            var ctClips = _target.GetCommandTransitionClips().ToList();
+            // 指令转移
             _foldCommandTransitions = EditorGUILayout.Foldout(_foldCommandTransitions,
-                $"指令转移 ({ctClips.Count})", true, EditorStyles.foldoutHeader);
+                $"指令转移 ({_target.commandTransitions?.Count ?? 0})", true, EditorStyles.foldoutHeader);
             if (_foldCommandTransitions)
             {
                 EditorGUI.indentLevel++;
-                for (int i = 0; i < ctClips.Count; i++)
+                EditorGUI.BeginChangeCheck();
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty("commandTransitions"),
+                    new GUIContent("指令转移"), true);
+                if (EditorGUI.EndChangeCheck())
                 {
-                    var (timelineClip, ctAsset, ctTrack) = ctClips[i];
-                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-                    EditorGUILayout.LabelField(
-                        $"[{timelineClip.start:F2}s ~ {timelineClip.start + timelineClip.duration:F2}s]",
-                        EditorStyles.boldLabel);
-
-                    var clipSO = new SerializedObject(ctAsset);
-                    clipSO.Update();
-                    EditorGUI.BeginChangeCheck();
-                    EditorGUILayout.PropertyField(clipSO.FindProperty("commandTransition"), true);
-                    EditorGUILayout.PropertyField(clipSO.FindProperty("inputBufferDuration"),
-                        new GUIContent("输入缓冲"));
-                    if (EditorGUI.EndChangeCheck())
-                    {
-                        clipSO.ApplyModifiedProperties();
-                        var displayName = ctAsset.GetDisplayName();
-                        timelineClip.displayName = displayName;
-                        ctTrack.name = displayName;
-                        EditorUtility.SetDirty(_target);
-                    }
-                    else
-                    {
-                        clipSO.ApplyModifiedProperties();
-                    }
-
-                    if (GUILayout.Button("删除", GUILayout.Width(50)))
-                    {
-                        _target.DeleteTrack(ctTrack);
-                        EditorUtility.SetDirty(_target);
-                        AssetDatabase.SaveAssets();
-                        TimelineEditor.Refresh(RefreshReason.ContentsAddedOrRemoved);
-                        GUIUtility.ExitGUI();
-                    }
-
-                    EditorGUILayout.EndVertical();
+                    serializedObject.ApplyModifiedProperties();
+                    SyncCommandTransitionTracks(_target);
                 }
-
-                if (GUILayout.Button("添加指令转移"))
-                {
-                    var track = _target.CreateTrack<CommandTransitionTrack>(null, "指令转移");
-                    track.CreateClip<CommandTransitionClip>();
-                    EditorUtility.SetDirty(_target);
-                    AssetDatabase.SaveAssets();
-                    TimelineEditor.Refresh(RefreshReason.ContentsAddedOrRemoved);
-                }
-
                 EditorGUI.indentLevel--;
             }
 
@@ -175,6 +138,106 @@ namespace SkillSystem.Editor
             }
 
             serializedObject.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// 将 commandTransitions 列表同步到 Timeline 轨道
+        /// </summary>
+        private static void SyncCommandTransitionTracks(ActionSO action)
+        {
+            // 删除现有的指令转移轨道
+            var existingTracks = action.GetCommandTransitionTracks().ToList();
+            foreach (var track in existingTracks)
+                action.DeleteTrack(track);
+
+            // 根据列表重建轨道
+            if (action.commandTransitions == null) return;
+
+            foreach (var entry in action.commandTransitions)
+            {
+                if (entry?.transition == null) continue;
+
+                string displayName = $"{entry.transition.command} → {entry.transition.targetActionName ?? "?"}";
+                var track = action.CreateTrack<CommandTransitionTrack>(null, displayName);
+                var timelineClip = track.CreateClip<CommandTransitionClip>();
+
+                // 先设置 clip asset 属性再设置时间，避免 OnCreateClip 覆盖
+                var clipAsset = timelineClip.asset as CommandTransitionClip;
+                if (clipAsset != null)
+                {
+                    clipAsset.inputBufferDuration = entry.inputBufferDuration;
+                    clipAsset.commandTransition = entry.transition;
+                    EditorUtility.SetDirty(clipAsset);
+                }
+
+                timelineClip.start = entry.startTime;
+                timelineClip.duration = entry.duration > 0 ? entry.duration : 0.5;
+                timelineClip.displayName = displayName;
+            }
+
+            EditorUtility.SetDirty(action);
+            AssetDatabase.SaveAssets();
+            TimelineEditor.Refresh(RefreshReason.ContentsAddedOrRemoved);
+        }
+
+        /// <summary>
+        /// 从 Timeline 轨道同步回 commandTransitions 列表
+        /// </summary>
+        private static void SyncCommandTransitionsFromTracks(ActionSO action)
+        {
+            var trackClips = action.GetCommandTransitionClips().ToList();
+            int trackCount = trackClips.Count;
+            int listCount = action.commandTransitions?.Count ?? 0;
+
+            // 快速判断：数量和关键值都一致则跳过
+            if (trackCount == listCount && trackCount > 0)
+            {
+                bool allMatch = true;
+                for (int i = 0; i < trackCount; i++)
+                {
+                    var (clip, ctAsset, _) = trackClips[i];
+                    var entry = action.commandTransitions[i];
+                    if (entry?.transition == null ||
+                        !Mathf.Approximately((float)clip.start, entry.startTime) ||
+                        !Mathf.Approximately((float)clip.duration, entry.duration) ||
+                        !Mathf.Approximately(ctAsset.inputBufferDuration, entry.inputBufferDuration) ||
+                        ctAsset.commandTransition?.command != entry.transition.command ||
+                        ctAsset.commandTransition?.phase != entry.transition.phase ||
+                        ctAsset.commandTransition?.targetActionName != entry.transition.targetActionName ||
+                        !Mathf.Approximately(ctAsset.commandTransition?.fadeDuration ?? 0, entry.transition.fadeDuration))
+                    {
+                        allMatch = false;
+                        break;
+                    }
+                }
+                if (allMatch) return;
+            }
+            else if (trackCount == 0 && listCount == 0)
+            {
+                return;
+            }
+
+            // 从轨道重建列表
+            action.commandTransitions.Clear();
+            foreach (var (clip, ctAsset, _) in trackClips)
+            {
+                var ct = ctAsset.commandTransition;
+                action.commandTransitions.Add(new CommandTransitionEntry
+                {
+                    transition = ct != null ? new CommandTransitionInfo
+                    {
+                        command = ct.command,
+                        phase = ct.phase,
+                        targetActionName = ct.targetActionName,
+                        fadeDuration = ct.fadeDuration,
+                    } : new CommandTransitionInfo(),
+                    startTime = (float)clip.start,
+                    duration = (float)clip.duration,
+                    inputBufferDuration = ctAsset.inputBufferDuration,
+                });
+            }
+
+            EditorUtility.SetDirty(action);
         }
 
         private static void DrawSeparator(string label)
@@ -333,29 +396,32 @@ namespace SkillSystem.Editor
         private static bool _registered;
         private static bool _usingExternalTarget;
         private static GameObject _externalTarget;
-        private static ActionSO _currentAction;
+        private static TimelineAsset _currentTimeline;
         private static int _lastTrackCount;
+        private static Animator _previewAnimator;
+        private static bool _savedApplyRootMotion;
+        private static PreviewRootMotionDriver _rootMotionDriver;
+        private static Vector3 _savedPosition;
+        private static Quaternion _savedRotation;
 
         public static bool IsPreviewActive => _previewGo != null || _usingExternalTarget;
 
-        /// <summary>
-        /// 打开 Timeline 预览。如果提供了 targetObject，直接使用它（需有 Animator）；
-        /// 否则创建临时预览对象。
-        /// </summary>
         public static void OpenPreview(ActionSO action, GameObject targetObject = null)
         {
-            _currentAction = action;
+            // CleanupPreview 会把 _currentTimeline 清空，必须在赋值之前调用
+            if (targetObject != null)
+                CleanupPreview();
+
+            _currentTimeline = action;
 
             if (targetObject != null)
             {
-                // 使用指定的场景对象
                 var director = targetObject.GetComponent<PlayableDirector>();
                 if (director == null)
                     director = targetObject.AddComponent<PlayableDirector>();
 
                 director.playableAsset = action;
 
-                // 自动将所有 AnimationTrack 绑定到目标对象的 Animator
                 var animator = targetObject.GetComponent<Animator>();
                 if (animator != null)
                 {
@@ -364,6 +430,21 @@ namespace SkillSystem.Editor
                         if (track is AnimationTrack)
                             director.SetGenericBinding(track, animator);
                     }
+                }
+
+                // Driver 必须在 applyRootMotion=true 之前挂载，否则 Unity 会在无 OnAnimatorMove 的瞬间
+                // 把未初始化的 rootPosition (Infinity) 直接写入 transform.position
+                _savedPosition = targetObject.transform.position;
+                _savedRotation = targetObject.transform.rotation;
+                _rootMotionDriver = targetObject.GetComponent<PreviewRootMotionDriver>();
+                if (_rootMotionDriver == null)
+                    _rootMotionDriver = targetObject.AddComponent<PreviewRootMotionDriver>();
+
+                _previewAnimator = animator;
+                if (animator != null)
+                {
+                    _savedApplyRootMotion = animator.applyRootMotion;
+                    animator.applyRootMotion = true;
                 }
 
                 _usingExternalTarget = true;
@@ -377,7 +458,6 @@ namespace SkillSystem.Editor
                 return;
             }
 
-            // 无目标对象，创建临时预览对象
             if (_previewGo == null)
             {
                 _previewGo = new GameObject(PreviewName)
@@ -408,9 +488,31 @@ namespace SkillSystem.Editor
                 _previewGo = null;
             }
 
+            if (_previewAnimator != null)
+            {
+                _previewAnimator.applyRootMotion = _savedApplyRootMotion;
+                _previewAnimator = null;
+            }
+
+            if (_rootMotionDriver != null)
+            {
+                // 还原位置，消除预览期间根运动产生的移位积累
+                _rootMotionDriver.transform.SetPositionAndRotation(_savedPosition, _savedRotation);
+                UnityEngine.Object.DestroyImmediate(_rootMotionDriver);
+                _rootMotionDriver = null;
+            }
+
+            // 销毁预览用的 PlayableDirector，防止进入 Play Mode 后自动播放覆盖 Animator
+            if (_externalTarget != null)
+            {
+                var director = _externalTarget.GetComponent<PlayableDirector>();
+                if (director != null)
+                    UnityEngine.Object.DestroyImmediate(director);
+            }
+
             _usingExternalTarget = false;
             _externalTarget = null;
-            _currentAction = null;
+            _currentTimeline = null;
             _lastTrackCount = 0;
             UnregisterCleanupCallbacks();
         }
@@ -467,7 +569,7 @@ namespace SkillSystem.Editor
 
         private static void AutoBindNewTracks()
         {
-            if (_currentAction == null) return;
+            if (_currentTimeline == null) return;
 
             var targetGo = _usingExternalTarget ? _externalTarget : _previewGo;
             if (targetGo == null) return;
@@ -476,12 +578,12 @@ namespace SkillSystem.Editor
             var animator = targetGo.GetComponent<Animator>();
             if (director == null || animator == null) return;
 
-            int currentCount = _currentAction.GetOutputTracks().Count();
+            int currentCount = _currentTimeline.GetOutputTracks().Count();
             if (currentCount == _lastTrackCount) return;
 
             _lastTrackCount = currentCount;
 
-            foreach (var track in _currentAction.GetOutputTracks())
+            foreach (var track in _currentTimeline.GetOutputTracks())
             {
                 if (track is AnimationTrack && director.GetGenericBinding(track) == null)
                     director.SetGenericBinding(track, animator);
@@ -498,5 +600,57 @@ namespace SkillSystem.Editor
             }
             return false;
         }
+    }
+
+    /// <summary>
+    /// 预览专用根运动驱动组件。
+    /// 编辑器预览时 CharacterBehaviour 脚本不执行，该组件接管 OnAnimatorMove。
+    /// </summary>
+    [ExecuteAlways]
+    internal class PreviewRootMotionDriver : MonoBehaviour
+    {
+        private Animator _animator;
+        // 用绝对 rootPosition 偏移计算，避免 deltaPosition 累积/跳帧问题
+        private Vector3 _originPosition;
+        private Quaternion _originRotation;
+        private Vector3 _startRootPosition;
+        private Quaternion _startRootRotation;
+        // OnEnable 时 Animator 可能还未更新，rootPosition 可能是 NaN，改为懒初始化
+        private bool _initialized;
+
+        private void OnEnable()
+        {
+            _animator = GetComponent<Animator>();
+            _initialized = false;
+        }
+
+        private void OnAnimatorMove()
+        {
+            if (_animator == null) return;
+
+            Vector3 rootPos = _animator.rootPosition;
+            Quaternion rootRot = _animator.rootRotation;
+
+            // 首次收到有效 rootPosition 时才记录基准，避免 NaN
+            if (!_initialized)
+            {
+                if (!IsFinite(rootPos)) return;
+                _originPosition    = transform.position;
+                _originRotation    = transform.rotation;
+                _startRootPosition = rootPos;
+                _startRootRotation = rootRot;
+                _initialized = true;
+                return;
+            }
+
+            Vector3 newPos = _originPosition + (rootPos - _startRootPosition);
+            if (!IsFinite(newPos)) return;
+            transform.position = newPos;
+            transform.rotation = _originRotation * (Quaternion.Inverse(_startRootRotation) * rootRot);
+        }
+
+        private static bool IsFinite(Vector3 v)
+            => !float.IsNaN(v.x) && !float.IsNaN(v.y) && !float.IsNaN(v.z)
+            && !float.IsInfinity(v.x) && !float.IsInfinity(v.y) && !float.IsInfinity(v.z);
     }
 }

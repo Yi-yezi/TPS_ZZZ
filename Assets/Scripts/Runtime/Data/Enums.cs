@@ -12,6 +12,8 @@ namespace SkillSystem
         Skill = 4,
         Ultimate = 5,
         SwitchCharacter = 6,
+        DodgeFront = 7,   // 有移动输入时的 Dodge 指令
+        DodgeBack  = 8,   // 无移动输入时的 Dodge 指令
     }
 
     /// <summary>

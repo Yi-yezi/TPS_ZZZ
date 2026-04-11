@@ -8,7 +8,7 @@ using SkillSystem;
 /// 所有状态转移由编辑器中配置的 CommandTransition / FinishTransition / SignalTransition 决定
 /// Animator 只负责播放对应 State，不连线
 /// </summary>
-public class ActionPlayer
+public class ActionDriver
 {
     private readonly Dictionary<string, ActionRuntimeData> actionDB = new();
     private readonly Dictionary<string, ActionSO> actionSODB = new();
@@ -16,7 +16,7 @@ public class ActionPlayer
     // ─── 当前动作状态 ───
     public ActionRuntimeData CurrentAction { get; private set; }
     public string CurrentActionName => CurrentAction?.AnimatorStateName;
-    public float ActionTime { get; private set; }
+    public float ActionTime { get; private set; } // 动画播放时间（秒）
     public float ActionDuration { get; private set; }
     public bool IsPlaying => CurrentAction != null;
 
@@ -27,16 +27,22 @@ public class ActionPlayer
     private const float MaxBufferAge = 0.5f; // 输入缓冲最大有效时间
 
     // ─── 事件游标 ───
-    private int vfxCursor, sfxCursor, hitFeelCursor;
+    private int vfxCursor, sfxCursor, hitFeelCursor, hitBoxCursor;
+
+    // 已激活的 HitBox 事件，用于跟踪到期后关闭
+    private readonly List<ActionHitBoxEventData> activeHitBoxEvents = new();
 
     // ─── 回调 ───
     /// <summary>播放动画 (stateName, fadeDuration)</summary>
     public event Action<string, float> OnPlayAnimation;
-    public event Action<ActionVfxEventData> OnVfxEvent; // VFX事件
-    public event Action<ActionSfxEventData> OnSfxEvent; // SFX事件
-    public event Action<ActionHitFeelEventData> OnHitFeelEvent; // 受击反馈事件
-    /// <summary>动作结束回到待机</summary>
-    public event Action OnReturnToLocomotion;
+    public event Action<ActionVfxEventData> OnVfxEvent;
+    public event Action<ActionSfxEventData> OnSfxEvent;
+    public event Action<ActionHitFeelEventData> OnHitFeelEvent;
+    /// <summary>判定盒激活：进入 HitBoxClip 时间段</summary>
+    public event Action<ActionHitBoxEventData> OnHitBoxActivate;
+    /// <summary>判定盒关闭：离开 HitBoxClip 时间段</summary>
+    public event Action<ActionHitBoxEventData> OnHitBoxDeactivate;
+
 
     // ═══════════════════════════════════════
     //   初始化
@@ -47,20 +53,21 @@ public class ActionPlayer
         actionDB.Clear();
         actionSODB.Clear();
 
-        foreach (var so in actionList.actions)
+        foreach (var actionSO in actionList.actions)
         {
-            if (so == null) continue;
+            if (actionSO == null) continue;
 
-            var rd = ActionUnpacker.Unpack(so);
+            var runtimeData = ActionUnpacker.Unpack(actionSO);
 
             // 按 StartTime 排序，便于顺序游标遍历
-            rd.VfxEvents.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
-            rd.SfxEvents.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
-            rd.HitFeelEvents.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
-            rd.TransitionWindows.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+            runtimeData.VfxEvents.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+            runtimeData.SfxEvents.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+            runtimeData.HitFeelEvents.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+            runtimeData.HitBoxEvents.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+            runtimeData.TransitionWindows.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
 
-            actionDB[so.name] = rd;
-            actionSODB[so.name] = so;
+            actionDB[actionSO.name] = runtimeData;
+            actionSODB[actionSO.name] = actionSO;
         }
     }
 
@@ -71,22 +78,27 @@ public class ActionPlayer
     /// <summary>播放指定动作</summary>
     public bool PlayAction(string actionName, float fadeDuration = 0.15f)
     {
-        if (!actionDB.TryGetValue(actionName, out var data))
+        if (!actionDB.TryGetValue(actionName, out var runtimeData))
         {
-            Debug.LogWarning($"[ActionPlayer] Action not found: {actionName}");
+            Debug.LogWarning($"[ActionDriver] Action not found: {actionName}");
             return false;
         }
 
-
-        CurrentAction = data;
+        CurrentAction = runtimeData;
         ActionTime = 0f;
-        ActionDuration = (float)data.SourceAction.duration;
+        ActionDuration = (float)runtimeData.SourceAction.duration;
 
         // 重置所有游标
-        vfxCursor = sfxCursor = hitFeelCursor = 0;
+        vfxCursor = sfxCursor = hitFeelCursor = hitBoxCursor = 0;
+
+        // 停用所有正在激活的判定盒
+        foreach (var evt in activeHitBoxEvents)
+            OnHitBoxDeactivate?.Invoke(evt);
+        activeHitBoxEvents.Clear();
+
         bufferedCommand = EInputCommand.None;
 
-        OnPlayAnimation?.Invoke(data.AnimatorStateName, fadeDuration);
+        OnPlayAnimation?.Invoke(runtimeData.AnimatorStateName, fadeDuration);
         return true;
     }
 
@@ -110,7 +122,13 @@ public class ActionPlayer
     /// <summary>发送指令（尝试立即匹配转移窗口，否则缓冲）</summary>
     public void SendCommand(EInputCommand command, EInputPhase phase)
     {
-        if (CurrentAction != null && TryMatchCommand(command, phase))
+        if (CurrentAction == null)
+        {
+            Debug.LogWarning($"[ActionDriver] SendCommand({command}, {phase}) 被忽略：CurrentAction 为 null");
+            return;
+        }
+
+        if (TryMatchCommand(command, phase))
             return;
 
         // 缓冲输入
@@ -124,29 +142,13 @@ public class ActionPlayer
     {
         if (CurrentAction == null) return false;
 
-        var so = CurrentAction.SourceAction;
-
         // 检查当前动作的信号转移
-        foreach (var st in so.signalTransitions)
+        foreach (var signalTransition in CurrentAction.SourceAction.signalTransitions)
         {
-            if (st.Check(signal))
+            if (signalTransition.Check(signal))
             {
-                TransitionTo(st);
+                TransitionTo(signalTransition);
                 return true;
-            }
-        }
-
-        // 检查继承动作的信号转移
-        if (!string.IsNullOrEmpty(so.inheritTransitionActionName) &&
-            actionSODB.TryGetValue(so.inheritTransitionActionName, out var inherited))
-        {
-            foreach (var st in inherited.signalTransitions)
-            {
-                if (st.Check(signal))
-                {
-                    TransitionTo(st);
-                    return true;
-                }
             }
         }
 
@@ -176,20 +178,35 @@ public class ActionPlayer
 
     private void FireEvents()
     {
-        var act = CurrentAction;
-        float t = ActionTime;
-
         // VFX
-        while (vfxCursor < act.VfxEvents.Count && t >= act.VfxEvents[vfxCursor].StartTime)
-            OnVfxEvent?.Invoke(act.VfxEvents[vfxCursor++]);
+        while (vfxCursor < CurrentAction.VfxEvents.Count && ActionTime >= CurrentAction.VfxEvents[vfxCursor].StartTime)
+            OnVfxEvent?.Invoke(CurrentAction.VfxEvents[vfxCursor++]);
 
         // SFX
-        while (sfxCursor < act.SfxEvents.Count && t >= act.SfxEvents[sfxCursor].StartTime)
-            OnSfxEvent?.Invoke(act.SfxEvents[sfxCursor++]);
+        while (sfxCursor < CurrentAction.SfxEvents.Count && ActionTime >= CurrentAction.SfxEvents[sfxCursor].StartTime)
+            OnSfxEvent?.Invoke(CurrentAction.SfxEvents[sfxCursor++]);
 
         // HitFeel
-        while (hitFeelCursor < act.HitFeelEvents.Count && t >= act.HitFeelEvents[hitFeelCursor].StartTime)
-            OnHitFeelEvent?.Invoke(act.HitFeelEvents[hitFeelCursor++]);
+        while (hitFeelCursor < CurrentAction.HitFeelEvents.Count && ActionTime >= CurrentAction.HitFeelEvents[hitFeelCursor].StartTime)
+            OnHitFeelEvent?.Invoke(CurrentAction.HitFeelEvents[hitFeelCursor++]);
+
+        // HitBox 激活
+        while (hitBoxCursor < CurrentAction.HitBoxEvents.Count && ActionTime >= CurrentAction.HitBoxEvents[hitBoxCursor].StartTime)
+        {
+            var evt = CurrentAction.HitBoxEvents[hitBoxCursor++];
+            activeHitBoxEvents.Add(evt);
+            OnHitBoxActivate?.Invoke(evt);
+        }
+
+        // HitBox 停用（到期的判定窗口）
+        for (int i = activeHitBoxEvents.Count - 1; i >= 0; i--)
+        {
+            if (ActionTime >= activeHitBoxEvents[i].EndTime)
+            {
+                OnHitBoxDeactivate?.Invoke(activeHitBoxEvents[i]);
+                activeHitBoxEvents.RemoveAt(i);
+            }
+        }
     }
 
     // ═══════════════════════════════════════
@@ -209,38 +226,34 @@ public class ActionPlayer
             bufferedCommand = EInputCommand.None;
     }
 
-    private bool TryMatchCommand(EInputCommand cmd, EInputPhase phase)
+    private bool TryMatchCommand(EInputCommand command, EInputPhase phase)
     {
         if (CurrentAction == null) return false;
 
         // 检查当前动作的指令转移窗口
-        if (TryMatchWindows(CurrentAction.TransitionWindows, cmd, phase))
+        if (TryMatchWindows(CurrentAction.TransitionWindows, command, phase))
             return true;
-
-        // 检查继承动作的指令转移窗口
-        var so = CurrentAction.SourceAction;
-        if (!string.IsNullOrEmpty(so.inheritTransitionActionName) &&
-            actionDB.TryGetValue(so.inheritTransitionActionName, out var inheritedData))
-        {
-            if (TryMatchWindows(inheritedData.TransitionWindows, cmd, phase))
-                return true;
-        }
 
         return false;
     }
 
-    private bool TryMatchWindows(List<ActionTransitionWindowData> windows, EInputCommand cmd, EInputPhase phase)
+    private bool TryMatchWindows(List<ActionTransitionWindowData> windows, EInputCommand command, EInputPhase phase)
     {
-        float t = ActionTime;
-        foreach (var tw in windows)
+        // 对 ActionTime 取模，从而支持循环动作（如 Idle/Move）的转移窗口始终开放
+        float t = (ActionDuration > 0f) ? ActionTime % ActionDuration : ActionTime;
+
+        foreach (var window in windows)
         {
             // 窗口有效范围 = [StartTime - InputBuffer, StartTime + Duration]
-            float windowStart = tw.StartTime - tw.InputBufferDuration;
-            float windowEnd = tw.StartTime + tw.Duration;
+            float windowStart = window.StartTime - window.InputBufferDuration;
+            float windowEnd = window.StartTime + window.Duration;
 
-            if (t >= windowStart && t <= windowEnd && tw.Transition.Check(cmd, phase))
+            bool timeOk = t >= windowStart && t <= windowEnd;
+            bool cmdOk  = window.Transition.Check(command, phase);
+
+            if (timeOk && cmdOk)
             {
-                TransitionTo(tw.Transition);
+                TransitionTo(window.Transition);
                 return true;
             }
         }
@@ -255,9 +268,8 @@ public class ActionPlayer
     {
         if (string.IsNullOrEmpty(transition.targetActionName))
         {
-            // 目标为空 → 回到待机
-            Stop();
-            OnReturnToLocomotion?.Invoke();
+            // 目标为空 → 回到 Idle
+            ReturnToIdle(transition.fadeDuration);
             return;
         }
 
@@ -266,17 +278,22 @@ public class ActionPlayer
 
     private void HandleActionFinished()
     {
-        var ft = CurrentAction.SourceAction.finishTransition;
+        var finishTransition = CurrentAction.SourceAction.finishTransition;
 
-        if (ft != null && !string.IsNullOrEmpty(ft.targetActionName))
+        if (finishTransition != null && !string.IsNullOrEmpty(finishTransition.targetActionName))
         {
-            TransitionTo(ft);
+            TransitionTo(finishTransition);
         }
         else
         {
-            // 没有完成转移 → 回到待机
-            Stop();
-            OnReturnToLocomotion?.Invoke();
+            // 没有完成转移 → 回到 Idle
+            ReturnToIdle();
         }
+    }
+
+    private void ReturnToIdle(float fadeDuration = 0.15f)
+    {
+        Stop();
+        PlayAction(ActionNames.Idle, fadeDuration);
     }
 }

@@ -238,14 +238,17 @@ namespace SkillSystem.Editor
                     new Color(0.4f, 0.7f, 1f, 0.8f), false, "完成"));
             }
 
-            // 指令转移（来自轨道）
-            foreach (var (clip, ctAsset, _) in action.GetCommandTransitionClips())
+            // 指令转移
+            if (action.commandTransitions != null)
             {
-                var ct = ctAsset.commandTransition;
-                if (ct == null || string.IsNullOrEmpty(ct.targetActionName)) continue;
-                string label = $"指令:{ct.command}({ct.phase})";
-                connections.Add((action, ct.targetActionName,
-                    ActionEditorStyles.TransitionArrowColor, false, label));
+                foreach (var entry in action.commandTransitions)
+                {
+                    var ct = entry?.transition;
+                    if (ct == null || string.IsNullOrEmpty(ct.targetActionName)) continue;
+                    string label = $"指令:{ct.command}({ct.phase})";
+                    connections.Add((action, ct.targetActionName,
+                        ActionEditorStyles.TransitionArrowColor, false, label));
+                }
             }
 
             // 信号转移
@@ -258,13 +261,6 @@ namespace SkillSystem.Editor
                     connections.Add((action, st.targetActionName,
                         new Color(0.5f, 0.9f, 0.5f, 0.8f), false, label));
                 }
-            }
-
-            // 继承转移
-            if (!string.IsNullOrEmpty(action.inheritTransitionActionName))
-            {
-                connections.Add((action, action.inheritTransitionActionName,
-                    new Color(0.7f, 0.7f, 0.4f, 0.6f), true, "继承"));
             }
         }
 

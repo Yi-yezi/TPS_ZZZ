@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 using SkillSystem;
@@ -16,24 +15,28 @@ public class CharacterBehaviour : MonoBehaviour
     [Header("动作配置")]
     public ActionListSO actionList;
 
-    [Header("指令 → 入口动作（从待机状态触发）")]
-    public List<CommandActionMapping> commandMappings = new();
-
     [Header("重力")]
     public float gravity = -15f;
+
+    [Header("转向")]
+    [Tooltip("SmoothDamp 平滑时间（越小转向越快）")]
+    public float rotationTime = 0.08f;
 
     // ─── Components ───
     private Animator animator;
     private CombatEntity combatEntity;
-    private CharacterController cc;
+    private CharacterController characterController;
 
     // ─── Systems ───
-    private ActionPlayer actionPlayer;
+    private ActionDriver actionDriver;
     private CharacterInput inputActions;
+    private Camera mainCamera;
 
     // ─── State ───
     private Vector2 moveInput;
+    private Vector3 _stickWorldDir;   // 每帧缓存，摇杆相对相机的世界方向
     private float verticalVelocity;
+    private float _rotationVelocity;
 
     // ─── HitBox Cache ───
     private readonly Dictionary<string, HitBox> hitBoxes = new();
@@ -46,24 +49,24 @@ public class CharacterBehaviour : MonoBehaviour
     {
         animator = GetComponent<Animator>();
         combatEntity = GetComponent<CombatEntity>();
-        cc = GetComponent<CharacterController>();
+        characterController = GetComponent<CharacterController>();
 
-        // 收集所有 HitBox
-        foreach (var hb in GetComponentsInChildren<HitBox>(true))
+        foreach (var hitBox in GetComponentsInChildren<HitBox>(true))
         {
-            hitBoxes[hb.hitBoxName] = hb;
-            hb.Deactivate();
+            hitBoxes[hitBox.hitBoxName] = hitBox;
+            hitBox.Deactivate();
         }
 
         // 初始化动作驱动器
-        actionPlayer = new ActionPlayer();
-        actionPlayer.Init(actionList);
+        actionDriver = new ActionDriver();
+        actionDriver.Init(actionList);
 
-        actionPlayer.OnPlayAnimation += HandlePlayAnimation;
-        actionPlayer.OnReturnToLocomotion += HandleReturnToLocomotion;
-        actionPlayer.OnVfxEvent += HandleVfxEvent;
-        actionPlayer.OnSfxEvent += HandleSfxEvent;
-        actionPlayer.OnHitFeelEvent += HandleHitFeelEvent;
+        actionDriver.OnPlayAnimation += HandlePlayAnimation;
+        actionDriver.OnVfxEvent += HandleVfxEvent;
+        actionDriver.OnSfxEvent += HandleSfxEvent;
+        actionDriver.OnHitFeelEvent += HandleHitFeelEvent;
+        actionDriver.OnHitBoxActivate += HandleHitBoxActivate;
+        actionDriver.OnHitBoxDeactivate += HandleHitBoxDeactivate;
 
         // 战斗事件
 
@@ -73,13 +76,16 @@ public class CharacterBehaviour : MonoBehaviour
 
     private void Start()
     {
+        mainCamera = Camera.main;
         // 初始进入 Idle 动作
-        actionPlayer.PlayAction(ActionNames.Idle);
+        actionDriver.PlayAction(ActionNames.Idle);
     }
 
     private void OnEnable() => inputActions.Enable();
     private void OnDisable() => inputActions.Disable();
     private void OnDestroy() => inputActions.Dispose();
+
+    private bool _wasMoving;
 
     private void Update()
     {
@@ -87,11 +93,30 @@ public class CharacterBehaviour : MonoBehaviour
 
         if (combatEntity.IsDead) return;
 
-        actionPlayer.Update(Time.deltaTime);
+        actionDriver.Update(Time.deltaTime);
 
-        // 持续转发移动指令，让 Idle→Move / Move 保持等转移窗口能匹配
-        if (moveInput.sqrMagnitude > 0.01f)
-            actionPlayer.SendCommand(EInputCommand.Move, EInputPhase.Press);
+        bool isMoving = moveInput.sqrMagnitude > 0.01f;
+
+        // 每帧计算一次摇杆世界方向，供朝向与位移共用
+        _stickWorldDir = Vector3.zero;
+        if (isMoving)
+        {
+            Vector3 camFwd   = mainCamera.transform.forward; camFwd.y = 0f; camFwd.Normalize();
+            Vector3 camRight = mainCamera.transform.right;   camRight.y = 0f; camRight.Normalize();
+            _stickWorldDir = (camFwd * moveInput.y + camRight * moveInput.x).normalized;
+        }
+
+        AlignToCameraDirection();
+
+        // 持续转发移动指令，让 Idle→WalkStart / Move 等转移窗口能匹配
+        if (isMoving)
+        {
+            actionDriver.SendCommand(EInputCommand.Move, EInputPhase.Press);
+        }
+        else if (_wasMoving)
+            actionDriver.SendCommand(EInputCommand.Move, EInputPhase.Up);
+
+        _wasMoving = isMoving;
     }
 
     // ═══════════════════════════════════════
@@ -106,7 +131,13 @@ public class CharacterBehaviour : MonoBehaviour
             HandleCommand(EInputCommand.Attack, EInputPhase.Down);
 
         if (inputActions.Player.Dodge.WasPressedThisFrame())
-            HandleCommand(EInputCommand.Dodge, EInputPhase.Down);
+        {
+            // 有移动输入 → DodgeFront；无移动输入 → DodgeBack
+            var dodgeCmd = moveInput.sqrMagnitude > 0.01f
+                ? EInputCommand.DodgeFront
+                : EInputCommand.DodgeBack;
+            HandleCommand(dodgeCmd, EInputPhase.Down);
+        }
 
         if (inputActions.Player.Skill.WasPressedThisFrame())
             HandleCommand(EInputCommand.Skill, EInputPhase.Down);
@@ -119,8 +150,38 @@ public class CharacterBehaviour : MonoBehaviour
     {
         if (combatEntity.IsDead) return;
 
-        // 所有指令都交给 ActionPlayer，由当前动作的转移窗口决定是否匹配
-        actionPlayer.SendCommand(command, phase);
+        // 所有指令都交给 ActionDriver，由当前动作的转移窗口决定是否匹配
+        actionDriver.SendCommand(command, phase);
+    }
+
+    // ═══════════════════════════════════════
+    //   转向
+    // ═══════════════════════════════════════
+
+    /// <summary>
+    /// 有移动输入时朝向摇杆世界方向，停止后平滑回归相机朝向。
+    /// </summary>
+    private void AlignToCameraDirection()
+    {
+        float targetAngle;
+
+        if (_stickWorldDir.sqrMagnitude > 0.001f)
+        {
+            // 移动中：朝向摇杆世界方向
+            targetAngle = Mathf.Atan2(_stickWorldDir.x, _stickWorldDir.z) * Mathf.Rad2Deg;
+        }
+        else
+        {
+            // 停止时：回归相机水平朝向
+            Vector3 camForward = mainCamera.transform.forward;
+            camForward.y = 0f;
+            if (camForward.sqrMagnitude < 0.001f) return;
+            targetAngle = Mathf.Atan2(camForward.x, camForward.z) * Mathf.Rad2Deg;
+        }
+
+        float smoothAngle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle,
+                                ref _rotationVelocity, rotationTime);
+        transform.rotation = Quaternion.Euler(0f, smoothAngle, 0f);
     }
 
     // ═══════════════════════════════════════
@@ -134,32 +195,41 @@ public class CharacterBehaviour : MonoBehaviour
     {
         Vector3 rootDelta = animator.deltaPosition;
 
-        // 重力
-        if (cc.isGrounded)
-            verticalVelocity = -0.5f;
+        // 有移动输入时，将 Root Motion 的 XZ 位移重定向至摇杆世界方向（支持左右后退）
+        if (_stickWorldDir.sqrMagnitude > 0.001f)
+        {
+            float xzMag = new Vector3(rootDelta.x, 0f, rootDelta.z).magnitude;
+            rootDelta.x = _stickWorldDir.x * xzMag;
+            rootDelta.z = _stickWorldDir.z * xzMag;
+        }
+
+        // 当前动作标记 disableGravity 时（如跳跃技能），Y 轴完全由 Root Motion 控制
+        bool gravityDisabled = actionDriver.CurrentAction?.SourceAction.disableGravity ?? false;
+        if (gravityDisabled)
+        {
+            verticalVelocity = 0f;
+        }
         else
-            verticalVelocity += gravity * Time.deltaTime;
+        {
+            if (characterController.isGrounded)
+                verticalVelocity = -0.5f;
+            else
+                verticalVelocity += gravity * Time.deltaTime;
 
-        rootDelta.y += verticalVelocity * Time.deltaTime;
+            rootDelta.y += verticalVelocity * Time.deltaTime;
+        }
 
-        cc.Move(rootDelta);
-        transform.rotation *= animator.deltaRotation;
+        characterController.Move(rootDelta);
     }
 
     // ═══════════════════════════════════════
-    //   ActionPlayer 回调
+    //   ActionDriver 回调
     // ═══════════════════════════════════════
 
     private void HandlePlayAnimation(string stateName, float fadeDuration)
     {
-        animator.CrossFadeInFixedTime(stateName, fadeDuration);
-    }
-
-    private void HandleReturnToLocomotion()
-    {
         DeactivateAllHitBoxes();
-        // 回到 Idle 动作
-        actionPlayer.PlayAction(ActionNames.Idle);
+        animator.CrossFadeInFixedTime(stateName, fadeDuration);
     }
 
     private void HandleVfxEvent(ActionVfxEventData data)
@@ -197,9 +267,17 @@ public class CharacterBehaviour : MonoBehaviour
         // 震动: 相机 shake (shakeForce, shakeDuration)
     }
 
-    // ═══════════════════════════════════════
-    //   战斗事件
-    // ═══════════════════════════════════════
+    private void HandleHitBoxActivate(ActionHitBoxEventData data)
+    {
+        if (!hitBoxes.TryGetValue(data.HitBoxName, out var hitBox)) return;
+        hitBox.Activate(data.Damage, gameObject);
+    }
+
+    private void HandleHitBoxDeactivate(ActionHitBoxEventData data)
+    {
+        if (!hitBoxes.TryGetValue(data.HitBoxName, out var hitBox)) return;
+        hitBox.Deactivate();
+    }
 
     // ═══════════════════════════════════════
     //   工具
@@ -207,19 +285,10 @@ public class CharacterBehaviour : MonoBehaviour
 
     private void DeactivateAllHitBoxes()
     {
-        foreach (var hb in hitBoxes.Values)
-            hb.Deactivate();
+        foreach (var hitBox in hitBoxes.Values)
+            hitBox.Deactivate();
     }
 
-    /// <summary>
-    /// 指令 → 入口动作映射（Inspector 配置）
-    /// </summary>
-    [Serializable]
-    public class CommandActionMapping
-    {
-        public EInputCommand command;
-        public string actionName;
-    }
 }
 
 /// <summary>

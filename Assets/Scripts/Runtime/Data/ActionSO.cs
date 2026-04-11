@@ -12,6 +12,10 @@ namespace SkillSystem
     [CreateAssetMenu(fileName = "Action", menuName = "ActionSystem/Action")]
     public class ActionSO : TimelineAsset
     {
+        [Header("物理")]
+        [Tooltip("勾选后重力不叠加，Y 轴完全由 Root Motion 驱动（适合有跳跃的技能）")]
+        public bool disableGravity;
+
         [Header("战斗参数")]
         public float damage;
         public float cooldown;
@@ -23,8 +27,8 @@ namespace SkillSystem
         [Header("完成转移 - 动作播放完毕后自动转移")]
         public TransitionInfo finishTransition = new();
 
-        [Header("继承转移 - 从另一个动作继承转移规则")]
-        public string inheritTransitionActionName;
+        [Header("指令转移 - 时间窗口内匹配指令触发")]
+        public List<CommandTransitionEntry> commandTransitions = new();
 
         [Header("信号转移 - 全局生效的信号转移")]
         public List<SignalTransitionInfo> signalTransitions = new();

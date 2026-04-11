@@ -186,24 +186,18 @@ namespace SkillSystem.Editor
                     new Color(0.4f, 0.7f, 1f));
             }
 
-            // 继承转移
-            if (!string.IsNullOrEmpty(_action.inheritTransitionActionName))
+            // 指令转移
+            if (_action.commandTransitions != null)
             {
-                DrawTransitionEntry(ref y, lineHeight,
-                    $"[继承] ← {_action.inheritTransitionActionName}",
-                    "继承该动作的转移规则",
-                    new Color(0.7f, 0.7f, 0.4f));
-            }
-
-            // 指令转移（来自轨道）
-            foreach (var (clip, ctAsset, _) in _action.GetCommandTransitionClips())
-            {
-                var ct = ctAsset.commandTransition;
-                if (ct == null) continue;
-                DrawTransitionEntry(ref y, lineHeight,
-                    $"[指令] {ct.command}.{ct.phase} → {ct.targetActionName}",
-                    $"时间窗口: {clip.start:F2}s ~ {clip.start + clip.duration:F2}s, 缓冲: {ctAsset.inputBufferDuration:F2}s",
-                    ActionEditorStyles.TransitionArrowColor);
+                foreach (var entry in _action.commandTransitions)
+                {
+                    var ct = entry?.transition;
+                    if (ct == null) continue;
+                    DrawTransitionEntry(ref y, lineHeight,
+                        $"[指令] {ct.command}.{ct.phase} → {ct.targetActionName}",
+                        $"时间窗口: {entry.startTime:F2}s ~ {entry.startTime + entry.duration:F2}s, 缓冲: {entry.inputBufferDuration:F2}s",
+                        ActionEditorStyles.TransitionArrowColor);
+                }
             }
 
             // 信号转移
@@ -261,14 +255,17 @@ namespace SkillSystem.Editor
                         new Color(0.5f, 0.5f, 0.8f));
                 }
 
-                foreach (var (clip, ctAsset, _) in action.GetCommandTransitionClips())
+                if (action.commandTransitions != null)
                 {
-                    var ct = ctAsset.commandTransition;
-                    if (ct?.targetActionName != currentName) continue;
-                    DrawIncomingHeader(ref y, lineHeight, ref hasIncoming);
-                    DrawTransitionEntry(ref y, lineHeight,
-                        $"{action.name} [{ct.command}.{ct.phase}] → 此动作", "",
-                        new Color(0.8f, 0.7f, 0.4f));
+                    foreach (var entry in action.commandTransitions)
+                    {
+                        var ct = entry?.transition;
+                        if (ct?.targetActionName != currentName) continue;
+                        DrawIncomingHeader(ref y, lineHeight, ref hasIncoming);
+                        DrawTransitionEntry(ref y, lineHeight,
+                            $"{action.name} [{ct.command}.{ct.phase}] → 此动作", "",
+                            new Color(0.8f, 0.7f, 0.4f));
+                    }
                 }
 
                 if (action.signalTransitions != null)

@@ -28,6 +28,18 @@ namespace SkillSystem
     }
 
     /// <summary>
+    /// 指令转移条目：指令转移 + 时间窗口参数
+    /// </summary>
+    [Serializable]
+    public class CommandTransitionEntry
+    {
+        public CommandTransitionInfo transition = new();
+        public float startTime;
+        public float duration = 0.5f;
+        public float inputBufferDuration = 0.1f;
+    }
+
+    /// <summary>
     /// 信号转移：接收到特定信号时触发转移
     /// </summary>
     [Serializable]

@@ -24,6 +24,7 @@ namespace SkillSystem
         public readonly List<ActionVfxEventData> VfxEvents = new();
         public readonly List<ActionSfxEventData> SfxEvents = new();
         public readonly List<ActionHitFeelEventData> HitFeelEvents = new();
+        public readonly List<ActionHitBoxEventData> HitBoxEvents = new();
         public readonly List<ActionTransitionWindowData> TransitionWindows = new();
 
         public int TrackCount => TrackSummaries.Count;
@@ -89,6 +90,19 @@ namespace SkillSystem
     }
 
     /// <summary>
+    /// 攻击判定窗口事件数据（来自 HitBoxTrack）。
+    /// StartTime = 激活时刻，EndTime = 关闭时刻。
+    /// </summary>
+    [Serializable]
+    public struct ActionHitBoxEventData
+    {
+        public string HitBoxName;
+        public float Damage;
+        public float StartTime;
+        public float EndTime;
+    }
+
+    /// <summary>
     /// 指令转移时间窗口（来自 CommandTransitionTrack）。
     /// </summary>
     [Serializable]
@@ -141,6 +155,23 @@ namespace SkillSystem
                 foreach (var clip in clips)
                 {
                     FillClipData(data, track, clip);
+                }
+            }
+
+            // 从序列化的指令转移列表读取
+            if (action.commandTransitions != null)
+            {
+                foreach (var entry in action.commandTransitions)
+                {
+                    if (entry?.transition == null) continue;
+                    data.TransitionWindows.Add(new ActionTransitionWindowData
+                    {
+                        TrackName = "CommandTransition",
+                        StartTime = entry.startTime,
+                        Duration = entry.duration,
+                        InputBufferDuration = entry.inputBufferDuration,
+                        Transition = entry.transition,
+                    });
                 }
             }
 
@@ -203,6 +234,16 @@ namespace SkillSystem
                         PauseFrameDuration = hitFeelClip.pauseFrameDuration,
                         ShakeForce = hitFeelClip.shakeForce,
                         ShakeDuration = hitFeelClip.shakeDuration,
+                    });
+                    break;
+
+                case HitBoxClip hitBoxClip:
+                    data.HitBoxEvents.Add(new ActionHitBoxEventData
+                    {
+                        HitBoxName = hitBoxClip.hitBoxName,
+                        Damage     = hitBoxClip.damage,
+                        StartTime  = (float)clip.start,
+                        EndTime    = (float)clip.end,
                     });
                     break;
 
