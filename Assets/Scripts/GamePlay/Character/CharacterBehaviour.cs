@@ -31,6 +31,7 @@ public class CharacterBehaviour : MonoBehaviour
     private Animator animator;
     private CombatEntity combatEntity;
     private CharacterController characterController;
+    private AudioSource audioSource;
 
     // ─── Systems ───
     private ActionDriver actionDriver;
@@ -58,6 +59,10 @@ public class CharacterBehaviour : MonoBehaviour
     {
         animator = GetComponent<Animator>();
         combatEntity = GetComponent<CombatEntity>();
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 1f;
         characterController = GetComponent<CharacterController>();
 
         // 初始化动作驱动器
@@ -299,11 +304,8 @@ public class CharacterBehaviour : MonoBehaviour
         Vector3 pos = (parent != null ? parent.position : transform.position) + data.PositionOffset;
         Quaternion rot = Quaternion.Euler(data.RotationOffset);
 
-        var vfx = Instantiate(data.VfxPrefab, pos, rot);
-        if (data.AttachToParent && parent != null)
-            vfx.transform.SetParent(parent);
-
-        Destroy(vfx, data.Duration > 0 ? data.Duration : 3f);
+        Transform attachParent = (data.AttachToParent && parent != null) ? parent : null;
+        EffectPoolManager.Instance.SpawnVfx(data.VfxPrefab, pos, rot, data.Duration, attachParent);
     }
 
     private void HandleSfxEvent(ActionSfxEventData data)
@@ -313,7 +315,8 @@ public class CharacterBehaviour : MonoBehaviour
         var clip = data.AudioClips[UnityEngine.Random.Range(0, data.AudioClips.Length)];
         if (clip == null) return;
 
-        AudioSource.PlayClipAtPoint(clip, transform.position, data.Volume);
+        audioSource.pitch = data.Pitch + UnityEngine.Random.Range(-data.PitchRandomRange, data.PitchRandomRange);
+        audioSource.PlayOneShot(clip, data.Volume);
     }
 
     private void HandleHitFeelEvent(ActionHitFeelEventData data)
@@ -359,6 +362,10 @@ public class CharacterBehaviour : MonoBehaviour
     [Tooltip("单次伤害达到此值则触发重型受击信号")]
     public float heavyHitDamageThreshold = 30f;
 
+    [Tooltip("受击音效列表，随机播放（通过对象池在受击点播放）")]
+    public AudioClip[] hitSfxClips;
+    [Range(0f, 1f)] public float hitSfxVolume = 0.7f;
+
     /// <summary>
     /// 受到伤害：发送受击信号到 ActionDriver。
     /// 当前 ActionSO 若配置了对应 signalTransition（如 Idle/Move 配置了 HitLight→HitFront）
@@ -367,6 +374,14 @@ public class CharacterBehaviour : MonoBehaviour
     private void HandleDamaged(DamageInfo info)
     {
         if (combatEntity.IsDead) return;
+
+        // 受击音效 → 对象池（在受击点播放）
+        if (hitSfxClips != null && hitSfxClips.Length > 0)
+        {
+            var clip = hitSfxClips[UnityEngine.Random.Range(0, hitSfxClips.Length)];
+            if (clip != null)
+                EffectPoolManager.Instance.PlaySfx(clip, info.HitPoint, hitSfxVolume);
+        }
 
         bool isHeavy   = info.Damage >= heavyHitDamageThreshold;
         bool fromFront = Vector3.Dot(transform.forward, -info.HitDirection) >= 0f;

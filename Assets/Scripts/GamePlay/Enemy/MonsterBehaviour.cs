@@ -34,10 +34,15 @@ public class MonsterBehaviour : MonoBehaviour
     [Tooltip("触发重型受击动作的最低单次伤害")]
     public float heavyHitDamageThreshold = 30f;
 
+    [Tooltip("受击音效列表，随机播放（通过对象池在受击点播放）")]
+    public AudioClip[] hitSfxClips;
+    [Range(0f, 1f)] public float hitSfxVolume = 0.7f;
+
     // ─── Components ───
     private Animator animator;
     private CombatEntity combatEntity;
     private CharacterController characterController;
+    private AudioSource audioSource;
     private float verticalVelocity;
 
     // ─── Systems ───
@@ -61,6 +66,10 @@ public class MonsterBehaviour : MonoBehaviour
         animator = GetComponent<Animator>();
         combatEntity = GetComponent<CombatEntity>();
         characterController = GetComponent<CharacterController>();
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 1f;
 
         // Root Motion 在 OnAnimatorMove 中手动应用
         animator.applyRootMotion = false;
@@ -293,6 +302,14 @@ public class MonsterBehaviour : MonoBehaviour
     {
         if (combatEntity.IsDead) return;
 
+        // 受击音效 → 对象池（在受击点播放）
+        if (hitSfxClips != null && hitSfxClips.Length > 0)
+        {
+            var clip = hitSfxClips[Random.Range(0, hitSfxClips.Length)];
+            if (clip != null)
+                EffectPoolManager.Instance.PlaySfx(clip, damageInfo.HitPoint, hitSfxVolume);
+        }
+
         bool isHeavy   = damageInfo.Damage >= heavyHitDamageThreshold;
         bool fromFront = Vector3.Dot(transform.forward, -damageInfo.HitDirection) >= 0f;
 
@@ -333,11 +350,8 @@ public class MonsterBehaviour : MonoBehaviour
         Vector3 position = (parent != null ? parent.position : transform.position) + data.PositionOffset;
         Quaternion rotation = Quaternion.Euler(data.RotationOffset);
 
-        var vfxInstance = Object.Instantiate(data.VfxPrefab, position, rotation);
-        if (data.AttachToParent && parent != null)
-            vfxInstance.transform.SetParent(parent);
-
-        Object.Destroy(vfxInstance, data.Duration > 0 ? data.Duration : 3f);
+        Transform attachParent = (data.AttachToParent && parent != null) ? parent : null;
+        EffectPoolManager.Instance.SpawnVfx(data.VfxPrefab, position, rotation, data.Duration, attachParent);
     }
 
     private void HandleSfxEvent(ActionSfxEventData data)
@@ -347,7 +361,8 @@ public class MonsterBehaviour : MonoBehaviour
         var clip = data.AudioClips[Random.Range(0, data.AudioClips.Length)];
         if (clip == null) return;
 
-        AudioSource.PlayClipAtPoint(clip, transform.position, data.Volume);
+        audioSource.pitch = data.Pitch + Random.Range(-data.PitchRandomRange, data.PitchRandomRange);
+        audioSource.PlayOneShot(clip, data.Volume);
     }
 
     private void HandleHitBoxCheck(ActionHitBoxEventData data)
