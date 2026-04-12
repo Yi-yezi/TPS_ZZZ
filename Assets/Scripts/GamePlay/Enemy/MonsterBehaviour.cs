@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using BehaviorTree;
 using SkillSystem;
 using UnityEngine;
@@ -45,14 +43,14 @@ public class MonsterBehaviour : MonoBehaviour
     // ─── Systems ───
     private ActionDriver actionDriver;
 
-    // ─── HitBox Cache ───
-    private readonly Dictionary<string, HitBox> hitBoxes = new();
+    // ─── Blackboard ───
+    public Blackboard Blackboard { get; } = new Blackboard();
 
     // ─── AI State ───
     private BehaviorTreeNode behaviorTreeRoot;
-    private Transform playerTransform;
+    private Transform TargetTransform       => Blackboard.Get<Transform>(BlackboardKeys.Target);
+    private CombatEntity TargetCombatEntity => Blackboard.Get<CombatEntity>(BlackboardKeys.TargetCombatEntity);
     private float lastAttackTime = float.MinValue;
-    private bool isHitReacting;
 
     // ═══════════════════════════════════════
     //   生命周期
@@ -67,19 +65,12 @@ public class MonsterBehaviour : MonoBehaviour
         // Root Motion 在 OnAnimatorMove 中手动应用
         animator.applyRootMotion = false;
 
-        foreach (var hitBox in GetComponentsInChildren<HitBox>(true))
-        {
-            hitBoxes[hitBox.hitBoxName] = hitBox;
-            hitBox.Deactivate();
-        }
-
         actionDriver = new ActionDriver();
         actionDriver.Init(actionList);
         actionDriver.OnPlayAnimation += HandlePlayAnimation;
         actionDriver.OnVfxEvent     += HandleVfxEvent;
         actionDriver.OnSfxEvent     += HandleSfxEvent;
-        actionDriver.OnHitBoxActivate   += HandleHitBoxActivate;
-        actionDriver.OnHitBoxDeactivate += HandleHitBoxDeactivate;
+        actionDriver.OnHitBoxCheck   += HandleHitBoxCheck;
 
         combatEntity.OnDamaged += HandleDamaged;
         combatEntity.OnDied    += HandleDied;
@@ -87,10 +78,6 @@ public class MonsterBehaviour : MonoBehaviour
 
     private void Start()
     {
-        var playerObject = GameObject.FindWithTag("Player");
-        if (playerObject != null)
-            playerTransform = playerObject.transform;
-
         actionDriver.PlayAction(MonsterActionNames.Idle);
         behaviorTreeRoot = BuildBehaviorTree();
     }
@@ -106,10 +93,50 @@ public class MonsterBehaviour : MonoBehaviour
         // ActionDriver 始终更新（包括受击动画期间）
         actionDriver.Update(Time.deltaTime);
 
-        if (combatEntity.IsDead || isHitReacting) return;
+        if (combatEntity.IsDead || IsHitReacting) return;
+
+        // 目标为空或已死，重新扫描范围内存活玩家
+        var current = TargetCombatEntity;
+        if (current == null || current.IsDead)
+            UpdateTarget();
 
         behaviorTreeRoot.Evaluate();
     }
+
+    /// <summary>
+    /// 在 detectRadius 内扫描所有存活玩家，选取最近的一个锁定。
+    /// 多次被调用时只在目标失效后才执行，开销可接受。
+    /// </summary>
+    private void UpdateTarget()
+    {
+        float nearest = float.MaxValue;
+        Transform bestTransform = null;
+        CombatEntity bestEntity = null;
+
+        foreach (var go in GameObject.FindGameObjectsWithTag("Player"))
+        {
+            var entity = go.GetComponent<CombatEntity>();
+            if (entity == null || entity.IsDead) continue;
+
+            float dist = Vector3.Distance(transform.position, go.transform.position);
+            if (dist <= detectRadius && dist < nearest)
+            {
+                nearest = dist;
+                bestTransform = go.transform;
+                bestEntity = entity;
+            }
+        }
+
+        Blackboard.Set(BlackboardKeys.Target, bestTransform);
+        Blackboard.Set(BlackboardKeys.TargetCombatEntity, bestEntity);
+    }
+
+    /// <summary>是否正处于受击动作（替代 isHitReacting 布尔）</summary>
+    private bool IsHitReacting =>
+        actionDriver.CurrentActionName is
+            MonsterActionNames.HitFrontLight or
+            MonsterActionNames.HitFrontHeavy or
+            MonsterActionNames.HitStay;
 
     private void OnAnimatorMove()
     {
@@ -165,14 +192,16 @@ public class MonsterBehaviour : MonoBehaviour
 
     private bool IsPlayerInDetectRange()
     {
-        if (playerTransform == null) return false;
-        return Vector3.Distance(transform.position, playerTransform.position) <= detectRadius;
+        if (TargetTransform == null) return false;
+        if (TargetCombatEntity != null && TargetCombatEntity.IsDead) return false;
+        return Vector3.Distance(transform.position, TargetTransform.position) <= detectRadius;
     }
 
     private bool IsPlayerInAttackRange()
     {
-        if (playerTransform == null) return false;
-        return Vector3.Distance(transform.position, playerTransform.position) <= attackRadius;
+        if (TargetTransform == null) return false;
+        if (TargetCombatEntity != null && TargetCombatEntity.IsDead) return false;
+        return Vector3.Distance(transform.position, TargetTransform.position) <= attackRadius;
     }
 
     private bool IsAttackCooledDown()
@@ -195,8 +224,9 @@ public class MonsterBehaviour : MonoBehaviour
 
         if (!isAttacking) return NodeStatus.Failure;
 
-        if (playerTransform != null)
-            RotateTowardsTarget(playerTransform.position);
+        var target = TargetTransform;
+        if (target != null)
+            RotateTowardsTarget(target.position);
 
         return NodeStatus.Running;
     }
@@ -206,8 +236,9 @@ public class MonsterBehaviour : MonoBehaviour
     /// </summary>
     private NodeStatus StartRandomAttack()
     {
-        if (playerTransform != null)
-            RotateTowardsTarget(playerTransform.position);
+        var target = TargetTransform;
+        if (target != null)
+            RotateTowardsTarget(target.position);
 
         string attackActionName = Random.value < 0.5f
             ? MonsterActionNames.Attack01
@@ -224,12 +255,13 @@ public class MonsterBehaviour : MonoBehaviour
     /// </summary>
     private NodeStatus ChasePlayer()
     {
-        if (playerTransform == null) return NodeStatus.Failure;
+        var target = TargetTransform;
+        if (target == null) return NodeStatus.Failure;
 
-        float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
+        float distanceToPlayer = Vector3.Distance(transform.position, target.position);
 
-        // 旋转朝向玩家，Root Motion 会将角色向其面朝方向推进
-        RotateTowardsTarget(playerTransform.position);
+        // 旋转朝向玩家，Root Motion 会将角色向其面朴方向推进
+        RotateTowardsTarget(target.position);
 
         if (distanceToPlayer <= attackRadius)
         {
@@ -260,24 +292,19 @@ public class MonsterBehaviour : MonoBehaviour
     private void HandleDamaged(DamageInfo damageInfo)
     {
         if (combatEntity.IsDead) return;
-        StartCoroutine(PlayHitReaction(damageInfo));
-    }
 
-    private IEnumerator PlayHitReaction(DamageInfo damageInfo)
-    {
-        isHitReacting = true;
+        bool isHeavy   = damageInfo.Damage >= heavyHitDamageThreshold;
+        bool fromFront = Vector3.Dot(transform.forward, -damageInfo.HitDirection) >= 0f;
 
-        string hitActionName = damageInfo.Damage >= heavyHitDamageThreshold
-            ? MonsterActionNames.HitFrontHeavy
-            : MonsterActionNames.HitFrontLight;
+        string signal = (isHeavy, fromFront) switch
+        {
+            (true,  true)  => HitSignals.HitHeavyFront,
+            (true,  false) => HitSignals.HitHeavyBack,
+            (false, true)  => HitSignals.HitLightFront,
+            (false, false) => HitSignals.HitLightBack,
+        };
 
-        actionDriver.ForceAction(hitActionName);
-        float hitAnimationDuration = actionDriver.ActionDuration;
-
-        yield return new WaitForSeconds(hitAnimationDuration);
-
-        isHitReacting = false;
-        actionDriver.PlayAction(MonsterActionNames.Idle);
+        actionDriver.SendSignal(signal);
     }
 
     private void HandleDied()
@@ -292,7 +319,6 @@ public class MonsterBehaviour : MonoBehaviour
 
     private void HandlePlayAnimation(string stateName, float fadeDuration)
     {
-        DeactivateAllHitBoxes();
         animator.CrossFadeInFixedTime(stateName, fadeDuration);
     }
 
@@ -324,16 +350,33 @@ public class MonsterBehaviour : MonoBehaviour
         AudioSource.PlayClipAtPoint(clip, transform.position, data.Volume);
     }
 
-    private void HandleHitBoxActivate(ActionHitBoxEventData data)
+    private void HandleHitBoxCheck(ActionHitBoxEventData data)
     {
-        if (!hitBoxes.TryGetValue(data.HitBoxName, out var hitBox)) return;
-        hitBox.Activate(data.Damage, gameObject);
-    }
+        var target = TargetTransform;
+        if (target == null) return;
 
-    private void HandleHitBoxDeactivate(ActionHitBoxEventData data)
-    {
-        if (!hitBoxes.TryGetValue(data.HitBoxName, out var hitBox)) return;
-        hitBox.Deactivate();
+        float dist = Vector3.Distance(transform.position, target.position);
+        if (dist > data.AttackDistance) return;
+
+        Vector3 toTarget = target.position - transform.position;
+        toTarget.y = 0f;
+        if (toTarget.sqrMagnitude > 0.001f &&
+            Vector3.Angle(transform.forward, toTarget) > data.AttackAngle)
+            return;
+
+        var targetCombatEntity = target.GetComponent<CombatEntity>();
+        if (targetCombatEntity == null) return;
+
+        // 命中→先消耗判定盒，这帧内不再再次检测
+        actionDriver.ConsumeHitBox(data);
+
+        targetCombatEntity.TakeDamage(new DamageInfo
+        {
+            Damage       = data.Damage,
+            Attacker     = gameObject,
+            HitPoint     = target.position,
+            HitDirection = toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : transform.forward,
+        });
     }
 
     // ═══════════════════════════════════════
@@ -361,11 +404,5 @@ public class MonsterBehaviour : MonoBehaviour
         Quaternion targetRotation = Quaternion.LookRotation(direction);
         transform.rotation = Quaternion.RotateTowards(
             transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-    }
-
-    private void DeactivateAllHitBoxes()
-    {
-        foreach (var hitBox in hitBoxes.Values)
-            hitBox.Deactivate();
     }
 }

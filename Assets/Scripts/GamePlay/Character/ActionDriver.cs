@@ -42,6 +42,8 @@ public class ActionDriver
     public event Action<ActionHitBoxEventData> OnHitBoxActivate;
     /// <summary>判定盒关闭：离开 HitBoxClip 时间段</summary>
     public event Action<ActionHitBoxEventData> OnHitBoxDeactivate;
+    /// <summary>duration 期间每帧发布；检测到命中后调用 ConsumeHitBox() 停止后续检测</summary>
+    public event Action<ActionHitBoxEventData> OnHitBoxCheck;
 
 
     // ═══════════════════════════════════════
@@ -106,6 +108,16 @@ public class ActionDriver
     public void ForceAction(string actionName, float fadeDuration = 0.1f)
     {
         PlayAction(actionName, fadeDuration);
+    }
+
+    /// <summary>
+    /// 主动消耗一个活跃判定盒（命中后调用）。
+    /// 调用后该盒不再触发 OnHitBoxCheck，保证本次攻击只打一次伤害。
+    /// </summary>
+    public void ConsumeHitBox(ActionHitBoxEventData data)
+    {
+        if (activeHitBoxEvents.Remove(data))
+            OnHitBoxDeactivate?.Invoke(data);
     }
 
     /// <summary>停止当前动作</summary>
@@ -206,6 +218,15 @@ public class ActionDriver
                 OnHitBoxDeactivate?.Invoke(activeHitBoxEvents[i]);
                 activeHitBoxEvents.RemoveAt(i);
             }
+        }
+
+        // 对仍活跃判定盒每帧发出检测请求
+        // 用副本迭代，防止回调中 ConsumeHitBox() 修改集合
+        var checkSnapshot = activeHitBoxEvents.ToArray();
+        foreach (var evt in checkSnapshot)
+        {
+            if (activeHitBoxEvents.Contains(evt))
+                OnHitBoxCheck?.Invoke(evt);
         }
     }
 

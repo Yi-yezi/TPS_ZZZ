@@ -38,7 +38,6 @@ namespace SkillSystem.Editor
         private const string Atk04        = "Attack_Normal_04";
         private const string Atk04End     = "Attack_Normal_04_End";
         private const string HitFront     = "HitFrontLight";
-        private const string HitBack      = "HitBackLight";
         private const string Dead         = "Dead";
 
         [MenuItem("ActionSystem/配置安比转移关系")]
@@ -213,12 +212,47 @@ namespace SkillSystem.Editor
 
                 // ─ Hit ─────────────────────────────────────────
                 ( HitFront, Idle, new CommandEntry[0] ),
-                ( HitBack,  Idle, new CommandEntry[0] ),
 
                 // ─ Dead (终态) ─────────────────────────────────
                 ( Dead, "", new CommandEntry[0] ),
             };
-
+            // ── 信号转移表（按动作名配置）───────────────────────────────────────
+            // 所有状态四向受击均可打断（前/后 × 轻/重）
+            // 安比暂无背面受击动画，所有受击信号均映射到 HitFront
+            // 无敌帧：DodgeFront / DodgeBack
+            // 终态不配置：HitFront / Dead
+            var signalTable = new System.Collections.Generic.Dictionary<string, SignalEntry[]>
+            {
+                [Idle]          = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [WalkStart]     = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Move]          = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [RunEnd]        = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [TurnBack]      = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [AttackRush]    = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [AttackRushEnd] = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk01]         = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk01End]      = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk02]         = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk02End]      = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk03]         = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk03End]      = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk04]         = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [Atk04End]      = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [SkillQ]        = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                [SkillQEnd]     = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+                // 受击中再次被击：重新进入受击动作（连续打击效果）
+                [HitFront]      = new[] { Sig(HitSignals.HitLightFront, HitFront), Sig(HitSignals.HitLightBack, HitFront), Sig(HitSignals.HitHeavyFront, HitFront), Sig(HitSignals.HitHeavyBack, HitFront) },
+            };
+            // ── 攻击判定轨道表（start/end 为参考默认値，请在 Timeline 中微调）─────────────
+            var hitBoxTable = new System.Collections.Generic.Dictionary<string, HitBoxEntry[]>
+            {
+                [AttackRush] = new[] { HBx(0.20f, 0.45f, 15f, 2.5f, 90f) },
+                [Atk01]      = new[] { HBx(0.15f, 0.35f, 10f, 2.0f, 80f) },
+                [Atk02]      = new[] { HBx(0.15f, 0.35f, 10f, 2.0f, 80f) },
+                [Atk03]      = new[] { HBx(0.20f, 0.60f, 12f, 2.0f, 80f) },
+                [Atk04]      = new[] { HBx(0.25f, 0.75f, 25f, 2.0f, 80f) },
+                [SkillQ]     = new[] { HBx(0.40f, 0.60f, 30f, 2.5f, 90f) },
+            };
             // ── 应用到 Asset ───────────────────────────────────
             int success = 0, missing = 0;
 
@@ -264,10 +298,24 @@ namespace SkillSystem.Editor
                     entry.FindPropertyRelative("inputBufferDuration").floatValue= cmds[i].buffer;
                 }
 
+                // signalTransitions
+                var sigs = signalTable.TryGetValue(name, out var sigArr) ? sigArr : System.Array.Empty<SignalEntry>();
+                var sigsProp = so.FindProperty("signalTransitions");
+                sigsProp.ClearArray();
+                sigsProp.arraySize = sigs.Length;
+                for (int i = 0; i < sigs.Length; i++)
+                {
+                    var elem = sigsProp.GetArrayElementAtIndex(i);
+                    elem.FindPropertyRelative("signalName").stringValue       = sigs[i].signal;
+                    elem.FindPropertyRelative("targetActionName").stringValue = sigs[i].target;
+                    elem.FindPropertyRelative("fadeDuration").floatValue      = sigs[i].fade;
+                }
+
                 so.ApplyModifiedProperties();
 
                 // 同步建 CommandTransitionTrack，否则 Inspector 打开时 SyncFromTracks 会把列表清空
                 RebuildCommandTransitionTracks(action);
+                RebuildHitBoxTracks(action, hitBoxTable.TryGetValue(name, out var hbArr) ? hbArr : null);
 
                 EditorUtility.SetDirty(action);
                 success++;
@@ -293,10 +341,58 @@ namespace SkillSystem.Editor
             public float         buffer;
         }
 
+        private struct SignalEntry
+        {
+            public string signal;
+            public string target;
+            public float  fade;
+        }
+
         private static CommandEntry Cmd(EInputCommand command, EInputPhase phase, string target,
                                          float fade, float start, float dur, float buffer)
             => new CommandEntry { command = command, phase = phase, target = target,
                                   fade = fade, start = start, dur = dur, buffer = buffer };
+
+        private static SignalEntry Sig(string signal, string target, float fade = 0.05f)
+            => new SignalEntry { signal = signal, target = target, fade = fade };
+
+        private struct HitBoxEntry
+        {
+            public float start;
+            public float end;
+            public float damage;
+            public float distance;
+            public float angle;
+        }
+
+        private static HitBoxEntry HBx(float start, float end, float damage, float distance = 2f, float angle = 80f)
+            => new HitBoxEntry { start = start, end = end, damage = damage, distance = distance, angle = angle };
+
+        private static void RebuildHitBoxTracks(ActionSO action, HitBoxEntry[] entries)
+        {
+            foreach (var track in action.GetOutputTracks().OfType<HitBoxTrack>().ToList())
+                action.DeleteTrack(track);
+
+            if (entries == null || entries.Length == 0) return;
+
+            foreach (var entry in entries)
+            {
+                var track = action.CreateTrack<HitBoxTrack>(null, "攻击判定");
+                var clip  = track.CreateClip<HitBoxClip>();
+
+                if (clip.asset is HitBoxClip hitBoxClip)
+                {
+                    hitBoxClip.damage         = entry.damage;
+                    hitBoxClip.attackDistance = entry.distance;
+                    hitBoxClip.attackAngle    = entry.angle;
+                    EditorUtility.SetDirty(hitBoxClip);
+                }
+
+                clip.start        = entry.start;
+                clip.duration     = System.Math.Max(0.05, entry.end - entry.start);
+                clip.displayName  = $"HitBox {entry.damage}dmg";
+            }
+        }
 
         /// <summary>
         /// 返回 ActionSO 中 AnimationTrack 的 clip 总时长。

@@ -96,8 +96,11 @@ namespace SkillSystem
     [Serializable]
     public struct ActionHitBoxEventData
     {
-        public string HitBoxName;
         public float Damage;
+        /// <summary>有效攻击距离（m）；超过则判定无效</summary>
+        public float AttackDistance;
+        /// <summary>有效攻击角度（°）；目标不在正前方此角度范围内则判定无效</summary>
+        public float AttackAngle;
         public float StartTime;
         public float EndTime;
     }
@@ -240,10 +243,11 @@ namespace SkillSystem
                 case HitBoxClip hitBoxClip:
                     data.HitBoxEvents.Add(new ActionHitBoxEventData
                     {
-                        HitBoxName = hitBoxClip.hitBoxName,
-                        Damage     = hitBoxClip.damage,
-                        StartTime  = (float)clip.start,
-                        EndTime    = (float)clip.end,
+                        Damage         = hitBoxClip.damage,
+                        AttackDistance = hitBoxClip.attackDistance,
+                        AttackAngle    = hitBoxClip.attackAngle,
+                        StartTime      = (float)clip.start,
+                        EndTime        = (float)clip.end,
                     });
                     break;
 

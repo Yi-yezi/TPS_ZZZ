@@ -16,14 +16,6 @@ namespace SkillSystem
         [Tooltip("勾选后重力不叠加，Y 轴完全由 Root Motion 驱动（适合有跳跃的技能）")]
         public bool disableGravity;
 
-        [Header("战斗参数")]
-        public float damage;
-        public float cooldown;
-        public float attackDistance;
-        public float attackOffset;
-        public string[] hitboxNames;
-        public string[] parryNames;
-
         [Header("完成转移 - 动作播放完毕后自动转移")]
         public TransitionInfo finishTransition = new();
 

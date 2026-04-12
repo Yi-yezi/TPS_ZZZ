@@ -21,7 +21,6 @@ namespace SkillSystem.Editor
 
         // 折叠状态
         private bool _foldAnim = true;
-        private bool _foldCombat = true;
         private bool _foldFinishTransition = true;
         private bool _foldCommandTransitions = true;
         private bool _foldSignalTransitions = true;
@@ -78,21 +77,8 @@ namespace SkillSystem.Editor
                 EditorGUI.indentLevel--;
             }
 
-            // 战斗参数
-            _foldCombat = EditorGUILayout.Foldout(_foldCombat, "战斗参数", true, EditorStyles.foldoutHeader);
-            if (_foldCombat)
-            {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("disableGravity"), new GUIContent("禁用重力（Root Motion 控制 Y 轴）"));
-                EditorGUILayout.Space(2);
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("damage"), new GUIContent("伤害"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("cooldown"), new GUIContent("冷却时间"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("attackDistance"), new GUIContent("攻击距离"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("attackOffset"), new GUIContent("攻击偏移"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("hitboxNames"), new GUIContent("命中判定名"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("parryNames"), new GUIContent("弹反判定名"));
-                EditorGUI.indentLevel--;
-            }
+            // 物理参数
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("disableGravity"), new GUIContent("禁用重力（Root Motion 控制 Y 轴）"));
 
             EditorGUILayout.Space(8);
             DrawSeparator("状态转移");

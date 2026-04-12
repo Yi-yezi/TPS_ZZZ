@@ -17,10 +17,13 @@ public class CombatEntity : MonoBehaviour
 
     public event Action<DamageInfo> OnDamaged;
     public event Action OnDied;
+    /// <summary>血量变化（currentHp, maxHp）</summary>
+    public event Action<float, float> OnHpChanged;
 
     private void Awake()
     {
         currentHp = maxHp;
+        OnHpChanged?.Invoke(currentHp, maxHp);
     }
 
     public void TakeDamage(DamageInfo info)
@@ -28,6 +31,7 @@ public class CombatEntity : MonoBehaviour
         if (IsDead) return;
 
         currentHp = Mathf.Max(currentHp - info.Damage, 0f);
+        OnHpChanged?.Invoke(currentHp, maxHp);
         OnDamaged?.Invoke(info);
 
         if (currentHp <= 0f)
@@ -40,10 +44,12 @@ public class CombatEntity : MonoBehaviour
     {
         if (IsDead) return;
         currentHp = Mathf.Min(currentHp + amount, maxHp);
+        OnHpChanged?.Invoke(currentHp, maxHp);
     }
 
     public void ResetHp()
     {
         currentHp = maxHp;
+        OnHpChanged?.Invoke(currentHp, maxHp);
     }
 }

@@ -71,6 +71,15 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Tab"",
+                    ""type"": ""Button"",
+                    ""id"": ""c34d989e-9bb0-406e-9ec3-210dae56bbbd"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -172,6 +181,17 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
                     ""action"": ""UltimateSkill"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""bc81ada6-5dc2-4754-8d38-3e29fad255c4"",
+                    ""path"": ""<Keyboard>/tab"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Tab"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         },
@@ -233,6 +253,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
         m_Player_Attack = m_Player.FindAction("Attack", throwIfNotFound: true);
         m_Player_Skill = m_Player.FindAction("Skill", throwIfNotFound: true);
         m_Player_UltimateSkill = m_Player.FindAction("UltimateSkill", throwIfNotFound: true);
+        m_Player_Tab = m_Player.FindAction("Tab", throwIfNotFound: true);
         // Camera
         m_Camera = asset.FindActionMap("Camera", throwIfNotFound: true);
         m_Camera_CameraLook = m_Camera.FindAction("CameraLook", throwIfNotFound: true);
@@ -309,6 +330,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Attack;
     private readonly InputAction m_Player_Skill;
     private readonly InputAction m_Player_UltimateSkill;
+    private readonly InputAction m_Player_Tab;
     public struct PlayerActions
     {
         private @CharacterInput m_Wrapper;
@@ -318,6 +340,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
         public InputAction @Attack => m_Wrapper.m_Player_Attack;
         public InputAction @Skill => m_Wrapper.m_Player_Skill;
         public InputAction @UltimateSkill => m_Wrapper.m_Player_UltimateSkill;
+        public InputAction @Tab => m_Wrapper.m_Player_Tab;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -342,6 +365,9 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
             @UltimateSkill.started += instance.OnUltimateSkill;
             @UltimateSkill.performed += instance.OnUltimateSkill;
             @UltimateSkill.canceled += instance.OnUltimateSkill;
+            @Tab.started += instance.OnTab;
+            @Tab.performed += instance.OnTab;
+            @Tab.canceled += instance.OnTab;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -361,6 +387,9 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
             @UltimateSkill.started -= instance.OnUltimateSkill;
             @UltimateSkill.performed -= instance.OnUltimateSkill;
             @UltimateSkill.canceled -= instance.OnUltimateSkill;
+            @Tab.started -= instance.OnTab;
+            @Tab.performed -= instance.OnTab;
+            @Tab.canceled -= instance.OnTab;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -439,6 +468,7 @@ public partial class @CharacterInput: IInputActionCollection2, IDisposable
         void OnAttack(InputAction.CallbackContext context);
         void OnSkill(InputAction.CallbackContext context);
         void OnUltimateSkill(InputAction.CallbackContext context);
+        void OnTab(InputAction.CallbackContext context);
     }
     public interface ICameraActions
     {

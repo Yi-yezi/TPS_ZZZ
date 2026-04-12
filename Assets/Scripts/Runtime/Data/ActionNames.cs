@@ -21,6 +21,9 @@ namespace SkillSystem
         // Hit
         public const string HitFront = "HitFront";
 
+        // Dead
+        public const string Dead = "Dead";
+
         // Attack
         //public const string Attack_ParryAid_Start = "Attack_ParryAid_Start";
         //public const string Attack_ParryAid_H = "Attack_ParryAid_H";
@@ -63,5 +66,22 @@ namespace SkillSystem
 
         //public const string Hit_L_Front = "Hit_L_Front";
         //public const string Hit_L_Back = "Hit_L_Back";
+    }
+
+    /// <summary>
+    /// 受击信号名常量 - 传递给 ActionDriver.SendSignal()
+    /// 各 ActionSO 在 Inspector 的 signalTransitions 中配置是否响应这些信号。
+    /// 没有配置对应信号转移的动作（如翻滚、特定技能无敌帧）将自动无视受击。
+    /// </summary>
+    public static class HitSignals
+    {
+        /// <summary>普通受击 · 从正面（伤害低 + 攻击者在受击者前方）</summary>
+        public const string HitLightFront = "HitLightFront";
+        /// <summary>普通受击 · 从背面（伤害低 + 攻击者在受击者背后）</summary>
+        public const string HitLightBack  = "HitLightBack";
+        /// <summary>重型受击 · 从正面（伤害超阈值 + 攻击者在受击者前方）</summary>
+        public const string HitHeavyFront = "HitHeavyFront";
+        /// <summary>重型受击 · 从背面（伤害超阈值 + 攻击者在受击者背后）</summary>
+        public const string HitHeavyBack  = "HitHeavyBack";
     }
 }

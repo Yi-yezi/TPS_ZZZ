@@ -10,11 +10,14 @@ namespace SkillSystem
     /// </summary>
     public class HitBoxClip : PlayableAsset, ITimelineClipAsset
     {
-        [UnityEngine.Tooltip("对应预挂在武器/骨骼上的 HitBox.hitBoxName")]
-        public string hitBoxName;
-
         [UnityEngine.Tooltip("本次判定造成的伤害值")]
         public float damage;
+
+        [UnityEngine.Tooltip("有效攻击距离（m）。目标超出此距离则此次判定无效")]
+        public float attackDistance = 2f;
+
+        [UnityEngine.Tooltip("有效攻击角度（°）。目标在攻击者正前方此角度范围内才有效，默认 80°")]
+        public float attackAngle = 80f;
 
         public ClipCaps clipCaps => ClipCaps.None;
 
