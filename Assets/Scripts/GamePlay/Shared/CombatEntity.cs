@@ -52,4 +52,12 @@ public class CombatEntity : MonoBehaviour
         currentHp = maxHp;
         OnHpChanged?.Invoke(currentHp, maxHp);
     }
+
+    /// <summary>直接设置 HP（用于断线重连时恢复状态）。</summary>
+    public void SetHp(float hp, float max)
+    {
+        maxHp = max;
+        currentHp = Mathf.Clamp(hp, 0f, maxHp);
+        OnHpChanged?.Invoke(currentHp, maxHp);
+    }
 }

@@ -23,9 +23,9 @@ public class CharacterBehaviour : MonoBehaviour
 
     [Header("锟定")] 
     [Tooltip("进入该范围自动锁定敌人")]
-    public float lockOnRadius = 8f;
+    public float lockOnRadius = 12f;
     [Tooltip("超出该范围自动解除锁定（应大于 lockOnRadius）")]
-    public float lockOffRadius = 10f;
+    public float lockOffRadius = 15f;
 
     // ─── Components ───
     private Animator animator;
@@ -37,6 +37,9 @@ public class CharacterBehaviour : MonoBehaviour
     private ActionDriver actionDriver;
     private CharacterInput inputActions;
     private Camera mainCamera;
+
+    /// <summary>供网络同步读取当前动作状态。</summary>
+    public ActionDriver ActionDriverRef => actionDriver;
 
     // ─── State ───
     private Vector2 moveInput;
@@ -88,12 +91,14 @@ public class CharacterBehaviour : MonoBehaviour
         mainCamera = Camera.main;
 
         // 自动绑定最近的敌人作为攻击目标（可被外部 Lock-On 系统覆盖）
-        var enemyObj = GameObject.FindWithTag("Enemy");
-        if (enemyObj != null)
-            Blackboard.Set(BlackboardKeys.Target, enemyObj.transform);
+        TryBindNearestEnemy();
 
         // 初始进入 Idle 动作
         actionDriver.PlayAction(ActionNames.Idle);
+
+        // 注册到网络管理器（若存在）
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.RegisterLocalPlayer(this);
     }
 
     private void OnEnable() => inputActions.Enable();
@@ -106,6 +111,7 @@ public class CharacterBehaviour : MonoBehaviour
     }
 
     private bool _wasMoving;
+    private float _targetSearchTimer;
 
     private void Update()
     {
@@ -116,6 +122,17 @@ public class CharacterBehaviour : MonoBehaviour
         actionDriver.Update(Time.deltaTime);
 
         UpdateLockOn();
+
+        // 没有目标时定期重新搜索（远程怪物可能延迟生成）
+        if (!Blackboard.Has(BlackboardKeys.Target) || IsTargetInvalid())
+        {
+            _targetSearchTimer -= Time.deltaTime;
+            if (_targetSearchTimer <= 0f)
+            {
+                _targetSearchTimer = 0.5f;
+                TryBindNearestEnemy();
+            }
+        }
 
         bool isMoving = moveInput.sqrMagnitude > 0.01f;
 
@@ -128,8 +145,8 @@ public class CharacterBehaviour : MonoBehaviour
             _stickWorldDir = (camFwd * moveInput.y + camRight * moveInput.x).normalized;
         }
 
-        AlignToCameraDirection();
-        FaceTargetWhenAttacking();
+        if (!FaceTargetWhenAttacking())
+            AlignToCameraDirection();
 
         // 持续转发移动指令，让 Idle→WalkStart / Move 等转移窗口能匹配
         if (isMoving)
@@ -177,6 +194,39 @@ public class CharacterBehaviour : MonoBehaviour
         actionDriver.SendCommand(command, phase);
     }
 
+    private void TryBindNearestEnemy()
+    {
+        var enemies = GameObject.FindGameObjectsWithTag("Enemy");
+        if (enemies.Length == 0) return;
+
+        float bestDist = float.MaxValue;
+        GameObject best = null;
+        foreach (var e in enemies)
+        {
+            float d = Vector3.Distance(transform.position, e.transform.position);
+            if (d < bestDist)
+            {
+                bestDist = d;
+                best = e;
+            }
+        }
+        if (best != null)
+            Blackboard.Set(BlackboardKeys.Target, best.transform);
+    }
+
+    private bool IsTargetInvalid()
+    {
+        if (!Blackboard.TryGet<Transform>(BlackboardKeys.Target, out var t)) return true;
+        if (t == null) return true;
+        // 远程怪物死亡检测
+        var rm = t.GetComponent<RemoteMonsterController>();
+        if (rm != null && rm.IsDead) return true;
+        // 本地怪物死亡检测
+        var ce = t.GetComponent<CombatEntity>();
+        if (ce != null && ce.IsDead) return true;
+        return false;
+    }
+
     // ═══════════════════════════════════════
     //   转向
     // ═══════════════════════════════════════
@@ -187,6 +237,7 @@ public class CharacterBehaviour : MonoBehaviour
     private void UpdateLockOn()
     {
         if (!Blackboard.TryGet<Transform>(BlackboardKeys.Target, out var target)) return;
+        if (target == null) { Blackboard.Remove(BlackboardKeys.Target); _isLockedOn = false; return; }
 
         float dist = Vector3.Distance(transform.position, target.position);
 
@@ -226,24 +277,31 @@ public class CharacterBehaviour : MonoBehaviour
     /// 锁定敌人时，攻击动作期间强制朝向敌人（覆盖 AlignToCameraDirection 的结果）。
     /// 移动动作不受影响。
     /// </summary>
-    private void FaceTargetWhenAttacking()
+    /// <summary>
+    /// 锁定敌人时，攻击动作期间强制朝向敌人。
+    /// 返回 true 表示已处理旋转（调用方应跳过 AlignToCameraDirection）。
+    /// </summary>
+    private bool FaceTargetWhenAttacking()
     {
-        if (!IsLockedOn) return;
+        if (!IsLockedOn) return false;
 
         var current = actionDriver.CurrentActionName;
-        if (current == null) return;
+        if (current == null) return false;
 
         // 只在主动攻击动作期间朝向敌人（AttackRush / Attack_Normal_xx / SkillQ 等）
         bool isAttack = current.StartsWith("Attack") || current.StartsWith("Skill");
-        if (!isAttack) return;
+        if (!isAttack) return false;
 
         var target = Blackboard.Get<Transform>(BlackboardKeys.Target);
+        if (target == null) return false;
         Vector3 toTarget = target.position - transform.position;
         toTarget.y = 0f;
-        if (toTarget.sqrMagnitude < 0.001f) return;
+        if (toTarget.sqrMagnitude < 0.001f) return true;
 
         // 瞬间对齐朝向（攻击已开始，不需要平滑）
         transform.rotation = Quaternion.LookRotation(toTarget);
+        _rotationVelocity = 0f; // 清除 SmoothDamp 惯性，防止攻击结束后弹回
+        return true;
     }
 
     // ═══════════════════════════════════════
@@ -329,6 +387,7 @@ public class CharacterBehaviour : MonoBehaviour
     private void HandleHitBoxCheck(ActionHitBoxEventData data)
     {
         if (!Blackboard.TryGet<Transform>(BlackboardKeys.Target, out var target)) return;
+        if (target == null) return;
 
         float dist = Vector3.Distance(transform.position, target.position);
         if (dist > data.AttackDistance) return;
@@ -339,18 +398,39 @@ public class CharacterBehaviour : MonoBehaviour
             Vector3.Angle(transform.forward, toTarget) > data.AttackAngle)
             return;
 
-        var targetCombatEntity = target.GetComponent<CombatEntity>();
-        if (targetCombatEntity == null) return;
-
         // 命中→先消耗判定盒，这帧内不再再次检测
         actionDriver.ConsumeHitBox(data);
+
+        Vector3 hitDir = toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : transform.forward;
+
+        // 检测目标是否为远程玩家 → 走网络 HitReport
+        var remotePlayer = target.GetComponent<RemotePlayerController>();
+        if (remotePlayer != null && NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.SendHitReport(
+                remotePlayer.PlayerId, data.Damage, target.position, hitDir);
+            return;
+        }
+
+        // 检测目标是否为远程怪物 → 走网络 HitMonsterReport
+        var remoteMonster = target.GetComponent<RemoteMonsterController>();
+        if (remoteMonster != null && NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.SendHitMonsterReport(
+                remoteMonster.MonsterId, data.Damage, target.position, hitDir);
+            return;
+        }
+
+        // 本地目标（未连接服务器时的怪物等）→ 直接扣血
+        var targetCombatEntity = target.GetComponent<CombatEntity>();
+        if (targetCombatEntity == null) return;
 
         targetCombatEntity.TakeDamage(new DamageInfo
         {
             Damage       = data.Damage,
             Attacker     = gameObject,
             HitPoint     = target.position,
-            HitDirection = toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : transform.forward,
+            HitDirection = hitDir,
         });
     }
 

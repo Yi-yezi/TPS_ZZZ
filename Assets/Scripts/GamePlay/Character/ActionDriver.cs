@@ -16,7 +16,7 @@ public class ActionDriver
     // ─── 当前动作状态 ───
     public ActionRuntimeData CurrentAction { get; private set; }
     public string CurrentActionName => CurrentAction?.AnimatorStateName;
-    public float ActionTime { get; private set; } // 动画播放时间（秒）
+    public float ActionTime { get; set; } // 动画播放时间（秒）
     public float ActionDuration { get; private set; }
     public bool IsPlaying => CurrentAction != null;
 
@@ -108,6 +108,33 @@ public class ActionDriver
     public void ForceAction(string actionName, float fadeDuration = 0.1f)
     {
         PlayAction(actionName, fadeDuration);
+    }
+
+    /// <summary>
+    /// 播放动作并跳到指定时间点（用于网络同步跳帧补偿）。
+    /// 跳过的时间段内的 VFX/SFX/HitFeel/HitBox 事件不会补发。
+    /// </summary>
+    public bool PlayActionAtTime(string actionName, float startTime, float fadeDuration = 0.1f)
+    {
+        if (!PlayAction(actionName, fadeDuration))
+            return false;
+
+        if (startTime <= 0f)
+            return true;
+
+        ActionTime = startTime;
+
+        // 快进所有事件游标到 startTime 之后，跳过已过去的事件
+        while (vfxCursor < CurrentAction.VfxEvents.Count && CurrentAction.VfxEvents[vfxCursor].StartTime < startTime)
+            vfxCursor++;
+        while (sfxCursor < CurrentAction.SfxEvents.Count && CurrentAction.SfxEvents[sfxCursor].StartTime < startTime)
+            sfxCursor++;
+        while (hitFeelCursor < CurrentAction.HitFeelEvents.Count && CurrentAction.HitFeelEvents[hitFeelCursor].StartTime < startTime)
+            hitFeelCursor++;
+        while (hitBoxCursor < CurrentAction.HitBoxEvents.Count && CurrentAction.HitBoxEvents[hitBoxCursor].StartTime < startTime)
+            hitBoxCursor++;
+
+        return true;
     }
 
     /// <summary>
